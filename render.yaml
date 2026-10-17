@@ -1,0 +1,33 @@
+# Render blueprint for the API (free plan). In Render choose New > Blueprint and pick this
+# repository; it asks for the values marked "sync: false" and creates the service.
+services:
+  - type: web
+    name: hsmlis-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    # Deployed by the GitHub workflow after the tests pass, not on every push.
+    autoDeploy: false
+    envVars:
+      - key: Database__MigrateOnStartup
+        value: "true"
+      - key: Jwt__SigningKey
+        generateValue: true
+      # Supabase session-pooler connection string.
+      - key: ConnectionStrings__Database
+        sync: false
+      # The web app's address, e.g. https://hsmlis.<your-subdomain>.workers.dev
+      - key: Cors__AllowedOrigins__0
+        sync: false
+      # The same random value as the PROXY_KEY secret in GitHub, at least 32 characters.
+      - key: Proxy__Key
+        sync: false
+      # First start on an empty database: creates the laboratory and its first administrator.
+      - key: Bootstrap__OrganizationName
+        sync: false
+      - key: Bootstrap__AdminUsername
+        sync: false
+      - key: Bootstrap__AdminPassword
+        sync: false

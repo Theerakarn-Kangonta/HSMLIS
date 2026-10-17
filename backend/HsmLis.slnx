@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HsmLis.Api/HsmLis.Api.csproj" />
+    <Project Path="src/HsmLis.Application/HsmLis.Application.csproj" />
+    <Project Path="src/HsmLis.Domain/HsmLis.Domain.csproj" />
+    <Project Path="src/HsmLis.Infrastructure/HsmLis.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HsmLis.Tests/HsmLis.Tests.csproj" />
+  </Folder>
+</Solution>

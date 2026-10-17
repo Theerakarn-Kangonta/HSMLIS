@@ -1,0 +1,57 @@
+# Local development stack: Postgres + the API. Production uses Supabase Postgres.
+#   docker compose up --build        start the database and API (http://localhost:8080)
+#   docker compose run --rm tests    run the backend test suite
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: hsmlis
+      POSTGRES_USER: hsmlis
+      POSTGRES_PASSWORD: hsmlis
+    # Bound to this machine only: the dev password must not be reachable from the network.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - hsmlis-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hsmlis -d hsmlis"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Database: Host=db;Port=5432;Database=hsmlis;Username=hsmlis;Password=hsmlis
+      # On an empty database: one organization, its administrator and the test catalog.
+      Bootstrap__OrganizationName: ห้องปฏิบัติการ
+      Bootstrap__AdminUsername: admin
+      Bootstrap__AdminPassword: Admin@1234567
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  tests:
+    profiles: ["test"]
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /work
+    environment:
+      TEST_DATABASE_SERVER: Host=db;Port=5432;Username=hsmlis;Password=hsmlis
+    volumes:
+      - ./backend:/src:ro
+      - hsmlis-nuget:/root/.nuget/packages
+    # Copies the source so Linux build output never mixes with the Windows bin/obj folders.
+    command: >
+      bash -c "cp -r /src/HsmLis.slnx /src/src /src/tests /work
+      && rm -rf /work/src/*/bin /work/src/*/obj /work/tests/*/bin /work/tests/*/obj
+      && dotnet test"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  hsmlis-db:
+  hsmlis-nuget:

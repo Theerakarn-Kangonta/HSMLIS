@@ -1,0 +1,123 @@
+# Tests every push and pull request. A push to main that passes is then deployed:
+# the web app to Cloudflare Workers, the API to Render.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a deploy half-way; do cancel superseded pull-request runs.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: hsmlis
+          POSTGRES_PASSWORD: hsmlis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hsmlis"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test
+        working-directory: backend
+        env:
+          TEST_DATABASE_SERVER: Host=localhost;Port=5432;Username=hsmlis;Password=hsmlis
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # No VITE_API_URL: the deployed app calls /api on its own address (see worker.js).
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: frontend/dist
+          retention-days: 7
+
+  deploy-api:
+    name: Deploy API (Render)
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+    steps:
+      - name: Skip until the secret is set
+        if: env.RENDER_DEPLOY_HOOK_URL == ''
+        run: echo "::notice::RENDER_DEPLOY_HOOK_URL is not set, so the API was not deployed."
+      - name: Ask Render to build and deploy this commit
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL&ref=$GITHUB_SHA" -o /dev/null
+
+  deploy-web:
+    name: Deploy web app (Cloudflare)
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      API_ORIGIN: ${{ vars.API_ORIGIN }}
+    steps:
+      - name: Skip until the secrets are set
+        if: env.CLOUDFLARE_API_TOKEN == '' || env.API_ORIGIN == ''
+        run: echo "::notice::CLOUDFLARE_API_TOKEN or API_ORIGIN is not set, so the web app was not deployed."
+      - uses: actions/checkout@v4
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.API_ORIGIN != ''
+      - uses: actions/setup-node@v4
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.API_ORIGIN != ''
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.API_ORIGIN != ''
+        working-directory: frontend
+      # The exact files the frontend job built and checked.
+      - uses: actions/download-artifact@v4
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.API_ORIGIN != ''
+        with:
+          name: web
+          path: frontend/dist
+      - uses: cloudflare/wrangler-action@v3
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.API_ORIGIN != ''
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: frontend
+          command: deploy --var API_ORIGIN:${{ vars.API_ORIGIN }}
+          secrets: |
+            PROXY_KEY
+        env:
+          PROXY_KEY: ${{ secrets.PROXY_KEY }}

@@ -1,0 +1,24 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Node
+node_modules/
+dist/
+.wrangler/
+
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+appsettings.Production.json
+*.pem
+*.key
+*.pfx
+
+# Editors / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store

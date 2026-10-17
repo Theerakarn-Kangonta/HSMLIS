@@ -1,0 +1,16 @@
+{
+  // Serves the built React app from Cloudflare and forwards /api to the .NET API (see worker.js).
+  // API_ORIGIN (a variable) and PROXY_KEY (a secret) are set by the deploy workflow.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hsmlis",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-11",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Unknown paths fall back to index.html so client-side routes survive a refresh.
+    "not_found_handling": "single-page-application",
+    // Everything else is a static file and never starts the worker.
+    "run_worker_first": ["/api/*"]
+  }
+}
