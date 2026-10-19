@@ -194,7 +194,10 @@ prints without asking because it trusts the matching certificate. Reports and in
 2. **Render:** set `Qz__PrivateKey` and `Qz__Certificate` from the two `render-*.txt` files it wrote. Keep a backup of
    `qz-private.key` in a safe place, then delete the `render-*.txt` files. The key never goes on a PC or into git.
 3. **Each lab PC:** copy the `printing` folder over and double-click `setup-printing.bat`. It installs QZ Tray (or
-   uses `qz-tray-2.3.0-x86_64.exe` next to it on a PC without internet), installs the certificate and starts QZ Tray.
+   uses `qz-tray-2.3.0-x86_64.exe` next to it on a PC without internet), installs the certificate, adds it to QZ
+   Tray's allowed list (so QZ Tray doesn't ask "Allow"), lets Chrome/Edge reach QZ Tray from the addresses in its
+   `SITES` line without asking, and starts QZ Tray. HealthSM signs with the same key (its `Printing__CertificatePem`
+   / `Printing__PrivateKeyPem`), so the same run sets up both apps on a PC.
 4. On a specimen label page press **Print**. The first TSC printer is picked; another one can be chosen (the printer
    name next to Print). The choice is remembered on that PC.
 
@@ -219,7 +222,8 @@ again on each PC.
 | Deploy jobs show "…is not set, so … was not deployed" | A GitHub secret or variable from step 5 is missing. |
 | A custom domain is added later | Add it to `Cors__AllowedOrigins__1` on Render. |
 | Label page says "QZ Tray is not running" | Start QZ Tray on that PC (or run `setup-printing.bat`). It should start with Windows. |
-| QZ Tray asks "Allow / Block" | That PC lacks the certificate, or it differs from `Qz__Certificate`: run `setup-printing.bat` again. |
+| QZ Tray asks "Allow / Block" once | Tick "Remember this decision" and press Allow. If it says "Untrusted website", that PC lacks the certificate or it differs from `Qz__Certificate`: run `setup-printing.bat` again. |
+| The browser asks to allow access to the local network | Press Allow, or add the site's address to `SITES` in `setup-printing.bat` and run it again. |
 | Label page says silent printing is not set up on the server | `Qz__Certificate` / `Qz__PrivateKey` missing or not valid PEM on Render. |
 | Labels print upside down, or one label spans two | Change `DIRECTION` or `LABEL.gap` in `frontend/src/lib/specimenLabel.ts`. |
 
