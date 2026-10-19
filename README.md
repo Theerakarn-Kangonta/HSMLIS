@@ -196,8 +196,8 @@ prints without asking because it trusts the matching certificate. Reports and in
 3. **Each lab PC:** copy the `printing` folder over and double-click `setup-printing.bat`. It installs QZ Tray (or
    uses `qz-tray-2.3.0-x86_64.exe` next to it on a PC without internet), installs the certificate, adds it to QZ
    Tray's allowed list (so QZ Tray doesn't ask "Allow"), lets Chrome/Edge reach QZ Tray from the addresses in its
-   `SITES` line without asking, and starts QZ Tray. HealthSM signs with the same key (its `Printing__CertificatePem`
-   / `Printing__PrivateKeyPem`), so the same run sets up both apps on a PC.
+   `SITES` line without asking, and starts QZ Tray. HealthSM uses the same key under the same names (`Qz__Certificate`,
+   `Qz__PrivateKey` on its Render service), so the same run sets up both apps on a PC.
 4. On a specimen label page press **Print**. The first TSC printer is picked; another one can be chosen (the printer
    name next to Print). The choice is remembered on that PC.
 
