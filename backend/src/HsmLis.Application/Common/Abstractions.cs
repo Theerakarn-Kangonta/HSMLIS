@@ -50,6 +50,15 @@ public interface ITokenService
     (string Token, DateTime ExpiresAt) CreateAccessToken(User user);
 }
 
+/// <summary>Signs QZ Tray requests, so QZ Tray on the lab PCs prints labels without asking.</summary>
+public interface IQzSigner
+{
+    /// <summary>The PEM certificate QZ Tray checks the signatures against.</summary>
+    string Certificate();
+    /// <summary>Base64 SHA-512 RSA signature of <paramref name="data"/>.</summary>
+    string Sign(string data);
+}
+
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);
 
 /// <summary>Which page of a list a caller asked for, held to sensible bounds.</summary>

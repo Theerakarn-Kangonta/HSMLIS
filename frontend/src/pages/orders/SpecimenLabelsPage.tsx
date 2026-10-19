@@ -3,14 +3,19 @@ import { ArrowLeft, Plus, Printer, Trash2 } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Barcode } from '../../components/Barcode'
-import { Button, Card, CardHeader, ErrorNote, IconButton, Input, Select, SkeletonCards, focusRing } from '../../components/ui'
+import { Button, Callout, Card, CardHeader, ErrorNote, IconButton, Input, Select, SkeletonCards, focusRing } from '../../components/ui'
 import { api, type Container, type OrderDetail } from '../../lib/api'
 import { useSpecimenTypes } from '../../lib/catalog'
 import { useI18n } from '../../lib/i18n'
+import { QzError, findLabelPrinter, listPrinters, savePrinter, savedPrinter } from '../../lib/qz'
+import { LABEL, printSpecimenLabels } from '../../lib/specimenLabel'
 import { useOrder } from './OrderDetailPage'
 
-/** Label size the print layout is made for: a common thermal tube label. */
-const LABEL = { width: 50, height: 25 }
+/** The vertical order number, in mm. A monospace digit takes 0.6em plus the letter spacing. */
+const DIGIT = { font: 3.2, spacing: 0.1 }
+/** Height of the patient-name row, in mm; the order number's last digit is centred on it. */
+const NAME_ROW = 3.2
+const LAST_DIGIT_PAD = NAME_ROW / 2 - DIGIT.spacing - (DIGIT.font * 0.6) / 2
 
 export function SpecimenLabelsPage() {
   const { id } = useParams()
@@ -35,10 +40,7 @@ export function SpecimenLabelsPage() {
             <span className="font-normal text-ink-muted">{t('labels.count', { containers: o.containers.filter((c) => c.status !== 'Rejected').length, labels: labels.length })}</span>
           </p>
         </div>
-        <Button onClick={() => window.print()} disabled={labels.length === 0}>
-          <Printer className="size-4" />
-          {t('common.print')}
-        </Button>
+        <SilentPrint order={o} disabled={labels.length === 0} />
       </div>
 
       <div className="no-print mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
@@ -56,31 +58,43 @@ export function SpecimenLabelsPage() {
 }
 
 function SpecimenLabel({ order, container }: { order: OrderDetail; container: Container }) {
-  const { formatDateTimeShort } = useI18n()
-  const collected = container.collectedAt ?? order.orderedAt
   return (
     <div
-      className="paper mx-auto flex flex-col overflow-hidden rounded-md border border-slate-300 px-[2mm] py-[1.5mm] shadow-sm print:break-after-page print:rounded-none print:border-0"
+      className="paper mx-auto flex gap-[1.2mm] overflow-hidden rounded-md border border-slate-300 py-[1.5mm] pr-[2mm] pl-[1mm] shadow-sm print:break-after-page print:rounded-none print:border-0"
       style={{ width: `${LABEL.width}mm`, height: `${LABEL.height}mm`, fontSize: '2.3mm', lineHeight: 1.15 }}
     >
-      <div className="flex items-baseline justify-between gap-1">
-        <span className="truncate font-bold" style={{ fontSize: '2.7mm' }}>
-          {order.patient.fullName}
-        </span>
-        {order.urgent ? <span className="shrink-0 rounded-sm bg-black px-[0.8mm] font-bold text-white">URGENT</span> : null}
+      {/* Turned 90° to the left, so it reads normally once the label is upright on the tube. */}
+      <div
+        className="flex shrink-0 items-center justify-end border-r border-black pr-[0.8mm] font-mono font-bold"
+        style={{
+          writingMode: 'vertical-rl',
+          transform: 'rotate(180deg)',
+          fontSize: `${DIGIT.font}mm`,
+          letterSpacing: `${DIGIT.spacing}mm`,
+          lineHeight: 1,
+          // After the rotation the end of the number is at the top: the last digit lines up with the name.
+          paddingInlineEnd: `${LAST_DIGIT_PAD}mm`,
+        }}
+      >
+        {order.orderNo}
       </div>
-      <div className="flex justify-between gap-1">
-        <span>HN {order.patient.hn}</span>
-        <span className="truncate">{order.referrer?.code ?? ''}</span>
-      </div>
-      <div className="truncate">
-        {container.specimenName} · {container.testCodes.join(',')}
-      </div>
-      <div className="mt-auto">
-        <Barcode value={container.lsn} height={22} className="!h-[7mm]" />
-        <div className="flex justify-between font-mono" style={{ fontSize: '2.2mm' }}>
-          <span>{container.lsn}</span>
-          <span>{formatDateTimeShort(collected)}</span>
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-[1.5mm]">
+        <div>
+          <div className="flex items-center justify-between gap-1" style={{ height: `${NAME_ROW}mm` }}>
+            <span className="truncate font-bold" style={{ fontSize: '2.7mm' }}>
+              {order.patient.fullName}
+            </span>
+            {order.urgent ? <span className="shrink-0 rounded-sm bg-black px-[0.8mm] font-bold text-white">URGENT</span> : null}
+          </div>
+          <div className="flex justify-between gap-1">
+            <span>HN {order.patient.hn}</span>
+            <span className="truncate">{order.referrer?.code ?? ''}</span>
+          </div>
+        </div>
+        <Barcode value={container.lsn} height={22} className="!h-[6mm] shrink-0" />
+        {/* Wraps (only after a comma) instead of cutting off, so every test code is printed. */}
+        <div className="min-h-0 overflow-hidden break-words" style={{ fontSize: '2mm', lineHeight: 1.1 }}>
+          {container.specimenName} · {container.testCodes.join(',\u200b')}
         </div>
       </div>
     </div>
@@ -163,5 +177,115 @@ function ContainerManager({ order }: { order: OrderDetail }) {
         <ErrorNote error={update.error ?? add.error ?? remove.error} />
       </div>
     </Card>
+  )
+}
+
+/**
+ * Prints straight to this PC's label printer through QZ Tray. When QZ Tray is missing or fails,
+ * it says why and offers the browser's print dialog instead.
+ */
+function SilentPrint({ order, disabled }: { order: OrderDetail; disabled: boolean }) {
+  const { t, errorText } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const [done, setDone] = useState<string | null>(null)
+  /** Shown when this PC's label printer has to be chosen. */
+  const [choices, setChoices] = useState<string[] | null>(null)
+  const [printer, setPrinter] = useState(savedPrinter)
+
+  async function run(work: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    setDone(null)
+    try {
+      await work()
+    } catch (e) {
+      setError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const print = (chosen?: string) =>
+    run(async () => {
+      let target = chosen ?? null
+      if (!target) {
+        const found = await findLabelPrinter()
+        if (!found.printer) {
+          setChoices(found.printers)
+          return
+        }
+        target = found.printer
+      }
+      savePrinter(target)
+      setPrinter(target)
+      setChoices(null)
+      const n = await printSpecimenLabels(order, target)
+      setDone(t('labels.printed', { n, printer: target }))
+    })
+
+  const change = () =>
+    run(async () => {
+      setChoices(await listPrinters())
+    })
+
+  const message =
+    error instanceof QzError ? t(error.reason === 'not_running' ? 'labels.qzNotRunning' : 'labels.noPrinters') : error ? errorText(error) : null
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {printer && !choices ? (
+        <button type="button" onClick={change} className={`max-w-48 truncate rounded text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline ${focusRing}`} title={t('labels.changePrinter')}>
+          {printer}
+        </button>
+      ) : null}
+      {choices ? (
+        <PrinterChoice printers={choices} initial={printer} busy={busy} onChoose={(p) => print(p)} onCancel={() => setChoices(null)} />
+      ) : (
+        <Button onClick={() => print()} disabled={disabled} loading={busy}>
+          <Printer className="size-4" />
+          {t('common.print')}
+        </Button>
+      )}
+      {message ? (
+        <div className="basis-full">
+          <Callout tone="danger" role="alert">
+            <span>{message}</span>{' '}
+            <button type="button" onClick={() => window.print()} className={`font-semibold underline ${focusRing}`}>
+              {t('labels.printBrowser')}
+            </button>
+          </Callout>
+        </div>
+      ) : null}
+      {done ? (
+        <div className="basis-full">
+          <Callout tone="success">{done}</Callout>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function PrinterChoice({ printers, initial, busy, onChoose, onCancel }: { printers: string[]; initial: string | null; busy: boolean; onChoose: (printer: string) => void; onCancel: () => void }) {
+  const { t } = useI18n()
+  const [value, setValue] = useState(initial && printers.includes(initial) ? initial : printers[0])
+  return (
+    <>
+      <span className="text-xs text-ink-muted">{t('labels.choosePrinter')}</span>
+      <Select value={value} onChange={(e) => setValue(e.target.value)} className="w-56" aria-label={t('labels.printer')}>
+        {printers.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </Select>
+      <Button variant="secondary" onClick={onCancel} disabled={busy}>
+        {t('common.cancel')}
+      </Button>
+      <Button onClick={() => onChoose(value)} loading={busy}>
+        <Printer className="size-4" />
+        {t('common.print')}
+      </Button>
+    </>
   )
 }

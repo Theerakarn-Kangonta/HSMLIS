@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { Bell, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, LogOut, Menu, PanelLeftClose, Search, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowLeft, Bell,ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { BackLinkProvider } from '../lib/backLink'
 import { useI18n } from '../lib/i18n'
 import { findTrail, onPath, visibleGroups, type NavGroup, type NavItem } from '../lib/nav'
 import { Button, DisplayToggles, Logo, Modal, focusRing } from './ui'
@@ -344,6 +345,7 @@ export function Layout() {
   const { t } = useI18n()
   const location = useLocation()
   const [hidden, setHidden] = useStoredFlag('hsmlis.nav.hidden')
+  const [back, setBack] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const trail = findTrail(location.pathname)
 
@@ -355,8 +357,17 @@ export function Layout() {
     <div className="flex min-h-screen">
       {hidden ? null : (
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-rule bg-surface lg:flex print:hidden">
-          <div className="flex h-16 shrink-0 items-center border-b border-rule px-4">
+          <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-rule px-4">
             <Brand />
+            <button
+              type="button"
+              onClick={() => setHidden(true)}
+              className={`flex size-8 shrink-0 items-center justify-center rounded-md text-ink-subtle hover:bg-slate-100 hover:text-ink ${focusRing}`}
+              aria-label={t('nav.collapse')}
+              title={t('nav.collapse')}
+            >
+              <PanelLeftClose className="size-4.5" />
+            </button>
           </div>
           <Sidebar />
         </aside>
@@ -367,15 +378,22 @@ export function Layout() {
           <button type="button" onClick={() => setDrawerOpen(true)} className={`flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-slate-100 lg:hidden ${focusRing}`} aria-label={t('nav.menu')}>
             <Menu className="size-5" />
           </button>
-          <button
-            type="button"
-            onClick={() => setHidden(!hidden)}
-            className={`hidden size-9 items-center justify-center rounded-md text-ink-muted hover:bg-slate-100 lg:flex ${focusRing}`}
-            aria-label={t(hidden ? 'nav.expand' : 'nav.collapse')}
-            title={t(hidden ? 'nav.expand' : 'nav.collapse')}
-          >
-            {hidden ? <Menu className="size-5" /> : <PanelLeftClose className="size-5" />}
-          </button>
+          {hidden ? (
+            <button
+              type="button"
+              onClick={() => setHidden(false)}
+              className={`hidden size-9 items-center justify-center rounded-md text-ink-muted hover:bg-slate-100 lg:flex ${focusRing}`}
+              aria-label={t('nav.expand')}
+              title={t('nav.expand')}
+            >
+              <PanelLeftOpen className="size-5" />
+            </button>
+          ) : null}
+          {back ? (
+            <Link to={back} className={`flex size-9 shrink-0 items-center justify-center rounded-md border border-rule bg-surface text-ink-muted hover:text-ink ${focusRing}`} aria-label={t('common.back')} title={t('common.back')}>
+              <ArrowLeft className="size-4" />
+            </Link>
+          ) : null}
           <nav aria-label={t('nav.breadcrumb')} className="hidden min-w-0 flex-1 items-center gap-1.5 truncate text-sm sm:flex">
             {trail ? (
               <>
@@ -400,7 +418,9 @@ export function Layout() {
 
         <main className="flex-1 p-4 sm:p-6 print:p-0">
           <div className="mx-auto max-w-[100rem]">
-            <Outlet />
+            <BackLinkProvider value={setBack}>
+              <Outlet />
+            </BackLinkProvider>
           </div>
         </main>
       </div>

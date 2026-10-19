@@ -109,12 +109,33 @@ public class WorkflowRulesTests
     public void Package_price_applies_its_discount(decimal list, DiscountType type, decimal value, decimal expected) =>
         Assert.Equal(expected, OrderRules.PackagePrice(list, type, value));
 
+    [Theory]
+    [InlineData(190, 10, 19)]
+    [InlineData(333, 12.5, 41.63)]
+    [InlineData(500, 100, 500)]
+    [InlineData(500, 0, 0)]
+    public void Order_discount_is_a_percentage_of_the_subtotal(decimal subtotal, decimal percent, decimal expected) =>
+        Assert.Equal(expected, OrderRules.OrderDiscount(subtotal, percent));
+
+    [Fact]
+    public void Package_shares_follow_list_prices_and_add_up_to_the_package_price()
+    {
+        Assert.Equal([60m, 40m, 20m], OrderRules.PackageShares(120, [150, 100, 50]));
+        // Rounding goes to the last test, so nothing is lost or invented.
+        var shares = OrderRules.PackageShares(100, [1, 1, 1]);
+        Assert.Equal([33.33m, 33.33m, 33.34m], shares);
+        Assert.Equal(100, shares.Sum());
+        Assert.Equal([50m, 50m], OrderRules.PackageShares(100, [0, 0]));
+        Assert.Empty(OrderRules.PackageShares(100, []));
+    }
+
     [Fact]
     public void Numbers_have_the_documented_formats()
     {
         var day = new DateOnly(2026, 9, 21);
-        Assert.Equal("CENTER2609210001", Numbering.OrderNo("CENTER", day, 1));
-        Assert.Equal("CENTER2609210001-02", Numbering.Lsn("CENTER2609210001", 2));
+        Assert.Equal("26090001", Numbering.OrderNo(day, 1));
+        Assert.Equal(Numbering.OrderKey(day), Numbering.OrderKey(new DateOnly(2026, 9, 30)));
+        Assert.Equal("26090001-02", Numbering.Lsn("26090001", 2));
         Assert.Equal("26090049", Numbering.Hn(day, 49));
         Assert.Equal("INV2609210007", Numbering.InvoiceNo(day, 7));
     }

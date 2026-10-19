@@ -52,6 +52,9 @@ The initial migration adds append-only triggers on `audit_logs` and `result_even
 - Design tokens are in `src/index.css` (indigo brand; dark theme via `[data-theme='dark']`). Printable documents use
   the `paper` class (always black on white, Sarabun).
 - Settings lists use `components/CrudPage.tsx`.
+- Specimen labels print silently through QZ Tray: `lib/specimenLabel.ts` draws the label and sends it as TSPL (TSC
+  printers) via `lib/qz.ts`; the API signs requests at `/api/qz` with `Qz:PrivateKey`. PC setup lives in `printing/`.
+  QZ's `wss://localhost` ports are allowed in `public/_headers`.
 
 ## Working rules
 

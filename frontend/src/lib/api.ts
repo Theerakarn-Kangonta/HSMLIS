@@ -61,7 +61,6 @@ export type Organization = {
   taxId: string | null
   address: string | null
   timeZone: string
-  orderPrefix: string
   autoLogoutMinutes: number
 }
 
@@ -249,6 +248,9 @@ export type OrderItem = {
   verifiedByName: string | null
   approvedAt: string | null
   approvedByName: string | null
+  cancelledAt: string | null
+  cancelledByName: string | null
+  cancelReason: string | null
 }
 
 export type InvoiceSummary = { id: string; invoiceNo: string; amount: number; paid: number; status: InvoiceStatus }
@@ -303,7 +305,7 @@ export type CreateOrder = {
   heightCm: number | null
   packageIds: string[]
   testIds: string[]
-  discount: number
+  discountPercent: number
 }
 
 export type OrderFilter = {
@@ -319,7 +321,30 @@ export type OrderFilter = {
 
 export type ResultActionResponse = { order: OrderDetail; done: number; skipped: number; skippedReason: string | null }
 export type ResultEvent = { action: string; value: string | null; flag: ResultFlag; userName: string; at: string }
-export type ResultsKpi = { pendingEntry: number; pendingVerify: number; pendingApprove: number; criticalOpen: number }
+/** An approved result of the same test from one of the patient's earlier orders (newest first). */
+export type PreviousResult = { labTestId: string; orderId: string; orderNo: string; value: string; flag: ResultFlag; unit: string | null; refText: string | null; at: string }
+/** One worklist row: the tests of one department on one order. */
+export type WorklistRow = {
+  orderId: string
+  orderNo: string
+  patientId: string
+  hn: string
+  patientName: string
+  referrerName: string | null
+  status: OrderStatus
+  urgent: boolean
+  orderedAt: string
+  receivedAt: string | null
+  departmentId: string
+  departmentName: string
+  departmentColor: string
+  itemCount: number
+  enteredCount: number
+  verifiedCount: number
+  approvedCount: number
+  hasCritical: boolean
+}
+export type ResultsKpi ={ pendingEntry: number; pendingVerify: number; pendingApprove: number; criticalOpen: number }
 export type SearchResult = { orders: OrderSummary[]; matchedLsn: string | null }
 
 export type Payment = { id: string; amount: number; method: PaymentMethod; note: string | null; paidAt: string; receivedByName: string }
@@ -485,10 +510,14 @@ export const api = {
   order: (id: string) => json<OrderDetail>('GET', `/orders/${id}`),
   createOrder: (body: CreateOrder) => json<OrderDetail>('POST', '/orders', body),
   cancelOrder: (id: string, reason: string) => json<OrderDetail>('POST', `/orders/${id}/cancel`, { reason }),
+  cancelItem: (id: string, itemId: string, reason: string) => json<OrderDetail>('POST', `/orders/${id}/items/${itemId}/cancel`, { reason }),
   addContainer: (id: string, specimenTypeId: string) => json<OrderDetail>('POST', `/orders/${id}/containers`, { specimenTypeId }),
   updateContainer: (id: string, containerId: string, body: { labelCount: number; containerType: string | null }) =>
     json<OrderDetail>('PUT', `/orders/${id}/containers/${containerId}`, body),
   removeContainer: (id: string, containerId: string) => json<OrderDetail>('DELETE', `/orders/${id}/containers/${containerId}`),
+
+  qzCertificate: () => json<{ certificate: string }>('GET', '/qz/certificate'),
+  qzSign: (data: string) => json<{ signature: string }>('POST', '/qz/sign', { data }),
 
   checkIn: (query: OrderFilter & { tab: CheckInTab }) => json<Paged<OrderSummary>>('GET', '/checkin', undefined, query),
   collect: (id: string, containerIds: string[] | null) => json<OrderDetail>('POST', `/checkin/${id}/collect`, { containerIds }),
@@ -499,7 +528,7 @@ export const api = {
   recollect: (id: string, containerId: string) => json<OrderDetail>('POST', `/checkin/${id}/containers/${containerId}/recollect`, {}),
 
   resultsKpi: () => json<ResultsKpi>('GET', '/results/kpi'),
-  worklist: (query: OrderFilter & { stage: WorklistStage }) => json<Paged<OrderSummary>>('GET', '/results', undefined, query),
+  worklist: (query: OrderFilter & { stage: WorklistStage }) => json<Paged<WorklistRow>>('GET', '/results', undefined, query),
   saveResults: (orderId: string, version: number, results: { itemId: string; value: string | null; comment: string | null }[]) =>
     json<ResultActionResponse>('POST', `/results/${orderId}`, { version, results }),
   verifyResults: (orderId: string, version: number, itemIds: string[] | null) =>
@@ -509,6 +538,7 @@ export const api = {
   reopenResult: (orderId: string, version: number, itemId: string, reason: string) =>
     json<ResultActionResponse>('POST', `/results/${orderId}/reopen`, { version, itemId, reason }),
   resultHistory: (orderId: string, itemId: string) => json<ResultEvent[]>('GET', `/results/${orderId}/items/${itemId}/history`),
+  previousResults: (orderId: string) => json<PreviousResult[]>('GET', `/results/${orderId}/previous`),
 
   billingKpi: () => json<BillingKpi>('GET', '/billing/kpi'),
   invoices: (query: { search?: string; status?: InvoiceStatus | ''; referrerId?: string; from?: string; to?: string; page: number; pageSize: number }) =>

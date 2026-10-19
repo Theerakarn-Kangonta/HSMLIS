@@ -87,6 +87,11 @@ public class OrdersController(IOrderService orders) : ControllerBase
     [HttpPost("{id:guid}/cancel")]
     public Task<OrderDetailDto> Cancel(Guid id, CancelOrderRequest request, CancellationToken ct) => orders.CancelAsync(id, request, ct);
 
+    /// <summary>Cancels one test of the order, with a reason. Same permission as cancelling the order.</summary>
+    [HttpPost("{id:guid}/items/{itemId:guid}/cancel")]
+    public Task<OrderDetailDto> CancelItem(Guid id, Guid itemId, CancelItemRequest request, CancellationToken ct) =>
+        orders.CancelItemAsync(id, itemId, request, ct);
+
     // Containers and their labels.
 
     [HttpPost("{id:guid}/containers")]
@@ -144,7 +149,7 @@ public class ResultsController(IResultService results) : ControllerBase
     public Task<ResultsKpiDto> Kpi(CancellationToken ct) => results.KpiAsync(ct);
 
     [HttpGet]
-    public Task<PagedResult<OrderSummaryDto>> Worklist(
+    public Task<PagedResult<WorklistRowDto>> Worklist(
         [FromQuery] WorklistStage stage,
         [FromQuery, StringLength(100)] string? search,
         [FromQuery] Guid? referrerId,
@@ -175,6 +180,10 @@ public class ResultsController(IResultService results) : ControllerBase
 
     [HttpGet("{orderId:guid}/items/{itemId:guid}/history")]
     public Task<List<ResultEventDto>> History(Guid orderId, Guid itemId, CancellationToken ct) => results.HistoryAsync(orderId, itemId, ct);
+
+    /// <summary>The patient's earlier approved results for this order's tests (results policy, like the rest of this controller).</summary>
+    [HttpGet("{orderId:guid}/previous")]
+    public Task<List<PreviousResultDto>> Previous(Guid orderId, CancellationToken ct) => results.PreviousAsync(orderId, ct);
 }
 
 [ApiController]

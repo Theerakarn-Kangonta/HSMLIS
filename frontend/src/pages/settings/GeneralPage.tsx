@@ -89,9 +89,6 @@ function OrganizationForm({ org }: { org: Organization }) {
         <Field label={t('patient.address')} className="sm:col-span-2">
           <Textarea {...text('address')} maxLength={400} rows={2} />
         </Field>
-        <Field label={t('org.orderPrefix')} hint={t('org.orderPrefixHint', { example: `${f.orderPrefix}2609210001` })}>
-          <Input value={f.orderPrefix} onChange={(e) => set({ orderPrefix: e.target.value.toUpperCase() })} required pattern="[A-Z0-9]+" maxLength={12} />
-        </Field>
         <Field label={t('org.timeZone')}>
           <Input value={f.timeZone} onChange={(e) => set({ timeZone: e.target.value })} required maxLength={64} />
         </Field>

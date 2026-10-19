@@ -1,4 +1,4 @@
-import { ArrowLeft, CircleAlert, CircleCheck, FlaskConical, Info, Languages, LoaderCircle, Moon, Search, Sun, TriangleAlert, X, type LucideIcon } from 'lucide-react'
+import { CircleAlert, CircleCheck, FlaskConical, Info, Languages, LoaderCircle, Moon, Search, Sun, TriangleAlert, X, type LucideIcon } from 'lucide-react'
 import {
   createContext,
   isValidElement,
@@ -14,6 +14,7 @@ import {
   type SelectHTMLAttributes,
 } from 'react'
 import { Link } from 'react-router-dom'
+import { useBackLink } from '../lib/backLink'
 import { useI18n } from '../lib/i18n'
 import { useTheme } from '../lib/theme'
 
@@ -259,15 +260,11 @@ export function DisplayToggles() {
 
 /** The top of a page: what it is, what it is for, a way back, and its main actions. */
 export function PageHeader({ title, description, back, children }: { title: ReactNode; description?: ReactNode; back?: string; children?: ReactNode }) {
-  const { t } = useI18n()
+  // The back link is drawn in the app shell's sticky top bar, so it stays reachable while scrolling.
+  useBackLink(back)
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 print:hidden">
       <div className="flex min-w-0 items-start gap-3">
-        {back ? (
-          <Link to={back} className={`mt-1 flex size-8 shrink-0 items-center justify-center rounded-md border border-rule bg-surface text-ink-muted hover:text-ink ${focusRing}`} aria-label={t('common.back')} title={t('common.back')}>
-            <ArrowLeft className="size-4" />
-          </Link>
-        ) : null}
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
           {description ? <p className="mt-1 max-w-prose text-sm text-ink-muted">{description}</p> : null}

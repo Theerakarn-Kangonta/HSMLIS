@@ -565,6 +565,20 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(170)")
                         .HasColumnName("approved_by_name");
 
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("cancel_reason");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<string>("CancelledByName")
+                        .HasMaxLength(170)
+                        .HasColumnType("character varying(170)")
+                        .HasColumnName("cancelled_by_name");
+
                     b.Property<string>("Comment")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -780,12 +794,6 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name_th");
-
-                    b.Property<string>("OrderPrefix")
-                        .IsRequired()
-                        .HasMaxLength(12)
-                        .HasColumnType("character varying(12)")
-                        .HasColumnName("order_prefix");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(40)

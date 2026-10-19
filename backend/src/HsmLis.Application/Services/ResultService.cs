@@ -9,12 +9,13 @@ namespace HsmLis.Application.Services;
 public interface IResultService
 {
     Task<ResultsKpiDto> KpiAsync(CancellationToken ct = default);
-    Task<PagedResult<OrderSummaryDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, PageRequest page, CancellationToken ct = default);
+    Task<PagedResult<WorklistRowDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, PageRequest page, CancellationToken ct = default);
     Task<ResultActionResponse> SaveAsync(Guid orderId, SaveResultsRequest request, CancellationToken ct = default);
     Task<ResultActionResponse> VerifyAsync(Guid orderId, ResultActionRequest request, CancellationToken ct = default);
     Task<ResultActionResponse> ApproveAsync(Guid orderId, ResultActionRequest request, CancellationToken ct = default);
     Task<ResultActionResponse> ReopenAsync(Guid orderId, ReopenRequest request, CancellationToken ct = default);
     Task<List<ResultEventDto>> HistoryAsync(Guid orderId, Guid itemId, CancellationToken ct = default);
+    Task<List<PreviousResultDto>> PreviousAsync(Guid orderId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -32,7 +33,7 @@ public class ResultService(
 {
     public Task<ResultsKpiDto> KpiAsync(CancellationToken ct = default) => orders.ResultsKpiAsync(ct);
 
-    public async Task<PagedResult<OrderSummaryDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, PageRequest page, CancellationToken ct = default)
+    public async Task<PagedResult<WorklistRowDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, PageRequest page, CancellationToken ct = default)
     {
         var ctx = await context.GetAsync(ct);
         var (from, to) = ctx.Bounds(filter.From, filter.To);
@@ -192,6 +193,15 @@ public class ResultService(
         var order = await orders.GetAsync(orderId, ct) ?? throw new NotFoundException("order_not_found", "Order not found.");
         FindItem(order, itemId);
         return (await orders.HistoryAsync(itemId, ct)).Select(e => new ResultEventDto(e.Action, e.Value, e.Flag, e.UserName, e.At)).ToList();
+    }
+
+    /// <summary>The patient's earlier approved results for this order's tests: up to 10 per test, newest first.</summary>
+    public async Task<List<PreviousResultDto>> PreviousAsync(Guid orderId, CancellationToken ct = default)
+    {
+        var order = await orders.GetAsync(orderId, ct) ?? throw new NotFoundException("order_not_found", "Order not found.");
+        var testIds = order.Items.Select(i => i.LabTestId).Distinct().ToList();
+        var found = await orders.PreviousResultsAsync(order.PatientId, order.Id, testIds, order.OrderedAt, 500, ct);
+        return found.GroupBy(r => r.LabTestId).SelectMany(g => g.Take(10)).ToList();
     }
 
     private async Task<LabOrder> Load(Guid id, int version, CancellationToken ct)

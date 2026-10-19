@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCheck, ExternalLink, History, Printer, RotateCcw, Save, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { ChartLine, CheckCheck, ExternalLink, History, Printer, RotateCcw, Save, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FlagBadge, ResultStatusBadge, UrgentBadge, isCritical } from '../../components/lab'
 import {
   Badge,
@@ -19,11 +19,11 @@ import {
   Select,
   SkeletonCards,
   Textarea,
-  focusRing,
   useToast,
 } from '../../components/ui'
-import { api, ApiError, type OrderDetail, type OrderItem, type ResultActionResponse } from '../../lib/api'
+import { api, ApiError, type OrderDetail, type OrderItem, type PreviousResult, type ResultActionResponse } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
+import { useBackLink } from '../../lib/backLink'
 import { useLabTests } from '../../lib/catalog'
 import { useI18n } from '../../lib/i18n'
 import { describe, evaluate, pickRange } from '../../lib/results'
@@ -31,16 +31,16 @@ import { useOrder } from '../orders/OrderDetailPage'
 
 type Draft = { value: string; comment: string }
 
+const draftsOf = (order: OrderDetail): Record<string, Draft> => Object.fromEntries(order.items.map((i) => [i.id, { value: i.value ?? '', comment: i.comment ?? '' }]))
+const isOpen = (i: OrderItem) => i.resultStatus !== 'Approved' && i.resultStatus !== 'Cancelled'
+
 export function ResultEntryPage() {
   const { id } = useParams()
   const query = useOrder(id)
-  const { t } = useI18n()
+  useBackLink('/lab-results')
   if (!query.data) {
     return (
       <div className="space-y-4">
-        <Link to="/lab-results" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
-          <ArrowLeft className="size-4" /> {t('common.back')}
-        </Link>
         <ErrorNote error={query.error} />
         {query.isLoading ? <SkeletonCards /> : null}
       </div>
@@ -57,10 +57,19 @@ function Entry({ order }: { order: OrderDetail }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const tests = useLabTests()
-  const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries(order.items.map((i) => [i.id, { value: i.value ?? '', comment: i.comment ?? '' }])))
+  const [params, setParams] = useSearchParams()
+  const [drafts, setDrafts] = useState<Record<string, Draft>>(() => draftsOf(order))
   const [jump, setJump] = useState('')
   const [historyOf, setHistoryOf] = useState<OrderItem | null>(null)
   const [reopen, setReopen] = useState<OrderItem | null>(null)
+  const [previousOf, setPreviousOf] = useState<OrderItem | null>(null)
+  // The patient's earlier approved results for these tests, newest first.
+  const previous = useQuery({ queryKey: ['previous-results', order.id], queryFn: () => api.previousResults(order.id), staleTime: 60_000 })
+  const previousByTest = useMemo(() => {
+    const map = new Map<string, PreviousResult[]>()
+    for (const r of previous.data ?? []) map.set(r.labTestId, [...(map.get(r.labTestId) ?? []), r])
+    return map
+  }, [previous.data])
 
   const testsById = useMemo(() => new Map((tests.data ?? []).map((x) => [x.id, x])), [tests.data])
   const received = new Set(order.containers.filter((c) => c.status === 'Received').map((c) => c.id))
@@ -80,13 +89,30 @@ function Entry({ order }: { order: OrderDetail }) {
     return test ? describe(pickRange(test.referenceRanges, order.patient.sex, order.patient.ageYears)) : null
   }
 
-  const entered = order.items.filter((i) => i.resultStatus !== 'Pending' && i.resultStatus !== 'Cancelled').length
-  const active = order.items.filter((i) => i.resultStatus !== 'Cancelled').length
-  const flagged = order.items.filter((i) => previewFlag(i) !== 'None').length
-  const verifiable = order.items.filter((i) => i.resultStatus === 'Entered').length
-  const approvable = order.items.filter((i) => i.resultStatus === 'Verified').length
-
   const departments = [...new Map(order.items.map((i) => [i.departmentId, { name: i.departmentName, color: i.departmentColor }])).entries()]
+  // One department at a time, so a single click never verifies or approves another department's work.
+  // The worklist names it (?dep=); otherwise the first one with work left.
+  const depId = departments.some(([id]) => id === params.get('dep'))
+    ? params.get('dep')!
+    : (departments.find(([id]) => order.items.some((i) => i.departmentId === id && isOpen(i)))?.[0] ?? departments[0]?.[0])
+  const dep = departments.find(([id]) => id === depId)?.[1]
+  const depItems = order.items.filter((i) => i.departmentId === depId)
+
+  const entered = depItems.filter((i) => i.resultStatus !== 'Pending' && i.resultStatus !== 'Cancelled').length
+  const active = depItems.filter((i) => i.resultStatus !== 'Cancelled').length
+  const flagged = depItems.filter((i) => previewFlag(i) !== 'None').length
+  const verifiable = depItems.filter((i) => i.resultStatus === 'Entered').length
+  const approvable = depItems.filter((i) => i.resultStatus === 'Verified').length
+
+  const switchDepartment = (id: string) => {
+    if (id === depId) return
+    if (dirty) {
+      if (!window.confirm(t('result.discardUnsaved'))) return
+      setDrafts(draftsOf(order))
+    }
+    setParams({ dep: id }, { replace: true })
+    window.scrollTo({ top: 0 })
+  }
 
   const applied = (r: ResultActionResponse) => {
     queryClient.setQueryData(['order', r.order.id], r.order)
@@ -105,7 +131,8 @@ function Entry({ order }: { order: OrderDetail }) {
         version = saved.order.version
       }
       if (action === 'save') return { action, response: saved }
-      const response = action === 'verify' ? await api.verifyResults(order.id, version, null) : await api.approveResults(order.id, version, null)
+      const ids = depItems.map((i) => i.id)
+      const response = action === 'verify' ? await api.verifyResults(order.id, version, ids) : await api.approveResults(order.id, version, ids)
       return { action, response }
     },
     onSuccess: ({ action, response }) => {
@@ -115,7 +142,8 @@ function Entry({ order }: { order: OrderDetail }) {
       if (action === 'approve') {
         toast(t('result.approvedToast', { n: response!.done }))
         if (response!.skipped > 0) toast(t('result.approveSkipped', { n: response!.skipped }), 'error')
-        if (response!.order.status === 'Completed') navigate('/lab-results?stage=Approve')
+        // This department is signed off: back to the worklist for the next one.
+        if (!response!.order.items.some((i) => i.departmentId === depId && isOpen(i))) navigate('/lab-results')
       }
     },
     onError: (error) => {
@@ -140,9 +168,6 @@ function Entry({ order }: { order: OrderDetail }) {
     <div className="pb-24">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <Link to="/lab-results" className={`mt-1 flex size-8 items-center justify-center rounded-md border border-rule bg-surface text-ink-muted hover:text-ink ${focusRing}`} aria-label={t('common.back')}>
-            <ArrowLeft className="size-4" />
-          </Link>
           <div>
             <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold text-ink">
               {order.patient.fullName}
@@ -150,6 +175,12 @@ function Entry({ order }: { order: OrderDetail }) {
                 HN <span className="font-mono">{order.patient.hn}</span>
               </Badge>
               {order.urgent ? <UrgentBadge /> : null}
+              {dep ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-2.5 py-0.5 text-sm font-semibold text-ink">
+                  <ColorDot color={dep.color} />
+                  {dep.name}
+                </span>
+              ) : null}
             </h1>
             <p className="mt-0.5 text-sm text-ink-muted">
               {order.patient.ageYears !== null ? `${t('patient.ageYears', { n: order.patient.ageYears })} · ` : ''}
@@ -174,30 +205,38 @@ function Entry({ order }: { order: OrderDetail }) {
             <p className="text-xs text-ink-muted">{t('result.enteredOf', { n: entered, total: active })}</p>
             <ProgressBar value={entered} max={active} />
             <ul className="space-y-3 text-sm">
-              {departments.map(([depId, dep]) => {
-                const items = order.items.filter((i) => i.departmentId === depId)
+              {departments.map(([id, d]) => {
+                const items = order.items.filter((i) => i.departmentId === id && i.resultStatus !== 'Cancelled')
                 const done = items.filter((i) => i.resultStatus !== 'Pending').length
+                const selected = id === depId
                 return (
-                  <li key={depId}>
-                    <a href={`#dep-${depId}`} className="flex items-center justify-between gap-2 font-medium text-ink hover:text-brand-700">
+                  <li key={id}>
+                    <button
+                      type="button"
+                      onClick={() => switchDepartment(id)}
+                      aria-current={selected ? 'true' : undefined}
+                      className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left font-medium ${selected ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-200' : 'text-ink hover:bg-page'}`}
+                    >
                       <span className="flex min-w-0 items-center gap-2">
-                        <ColorDot color={dep.color} />
-                        <span className="truncate">{dep.name}</span>
+                        <ColorDot color={d.color} />
+                        <span className="truncate">{d.name}</span>
                       </span>
                       <span className="shrink-0 text-xs tabular-nums text-ink-muted">
                         {done}/{items.length}
                       </span>
-                    </a>
-                    <ul className="ml-4.5 mt-1 space-y-0.5">
-                      {items.map((i) => (
+                    </button>
+                    {selected ? (
+                      <ul className="ml-6.5 mt-1 space-y-0.5">
+                        {depItems.map((i) => (
                         <li key={i.id}>
                           <a href={`#item-${i.id}`} className="flex items-center gap-1.5 text-xs text-ink-muted hover:text-ink">
                             <span className={`size-1.5 rounded-full ${i.resultStatus === 'Approved' ? 'bg-emerald-500' : i.resultStatus === 'Pending' ? 'bg-slate-300' : 'bg-brand-500'}`} aria-hidden />
                             <span className="font-mono">{i.testCode}</span>
                           </a>
                         </li>
-                      ))}
-                    </ul>
+                        ))}
+                      </ul>
+                    ) : null}
                   </li>
                 )
               })}
@@ -206,7 +245,7 @@ function Entry({ order }: { order: OrderDetail }) {
         </Card>
 
         <div className="space-y-5">
-          {departments.map(([depId, dep]) => {
+          {departments.filter(([id]) => id === depId).map(([depId, dep]) => {
             const items = order.items.filter((i) => i.departmentId === depId && (!needle || `${i.testCode} ${i.testNameEn}`.toLowerCase().includes(needle)))
             if (items.length === 0) return null
             const done = items.filter((i) => i.resultStatus !== 'Pending').length
@@ -235,6 +274,7 @@ function Entry({ order }: { order: OrderDetail }) {
                         <th className="px-4 py-2">{t('test.unit')}</th>
                         <th className="px-4 py-2">Flag</th>
                         <th className="px-4 py-2">{t('result.reference')}</th>
+                        <th className="px-4 py-2">{t('result.previous')}</th>
                         <th className="px-4 py-2">{t('result.status')}</th>
                         <th className="px-2 py-2" />
                         <th className="w-48 px-4 py-2">{t('result.comment')}</th>
@@ -251,6 +291,7 @@ function Entry({ order }: { order: OrderDetail }) {
                             <td className="px-4 py-2 text-ink">
                               {i.testNameEn}
                               {i.packageCode ? <span className="block text-xs text-ink-subtle">{i.packageCode}</span> : null}
+                              {i.resultStatus === 'Cancelled' && i.cancelReason ? <span className="block text-xs text-red-700">{i.cancelReason}</span> : null}
                             </td>
                             <td className="px-4 py-2">
                               {waiting && i.resultStatus === 'Pending' ? (
@@ -265,10 +306,18 @@ function Entry({ order }: { order: OrderDetail }) {
                             </td>
                             <td className="px-4 py-2 text-xs text-ink-muted">{refText(i) ?? '–'}</td>
                             <td className="px-4 py-2">
+                              <PreviousCell results={previousByTest.get(i.labTestId)} onOpen={() => setPreviousOf(i)} />
+                            </td>
+                            <td className="px-4 py-2">
                               <ResultStatusBadge status={i.resultStatus} />
                             </td>
                             <td className="px-2 py-2">
                               <div className="flex">
+                                {previousByTest.has(i.labTestId) ? (
+                                  <IconButton label={t('result.previousOpen')} onClick={() => setPreviousOf(i)}>
+                                    <ChartLine className="size-4" />
+                                  </IconButton>
+                                ) : null}
                                 <IconButton label={t('result.history')} onClick={() => setHistoryOf(i)}>
                                   <History className="size-4" />
                                 </IconButton>
@@ -316,13 +365,13 @@ function Entry({ order }: { order: OrderDetail }) {
             {can('results.verify') ? (
               <Button variant="secondary" onClick={() => run.mutate('verify')} disabled={verifiable === 0 && !dirty} loading={run.isPending && run.variables === 'verify'}>
                 <CheckCheck className="size-4" />
-                {t('result.verifyAll')}
+                {dep ? t('result.verifyDept', { dep: dep.name }) : t('result.verifyAll')}
               </Button>
             ) : null}
             {can('results.approve') ? (
               <Button variant="success" onClick={() => run.mutate('approve')} disabled={approvable === 0} loading={run.isPending && run.variables === 'approve'}>
                 <ShieldCheck className="size-4" />
-                {t('result.approveSign')}
+                {dep ? t('result.approveDept', { dep: dep.name }) : t('result.approveSign')}
               </Button>
             ) : null}
           </div>
@@ -331,6 +380,9 @@ function Entry({ order }: { order: OrderDetail }) {
 
       {historyOf ? <HistoryDialog order={order} item={historyOf} onClose={() => setHistoryOf(null)} /> : null}
       {reopen ? <ReopenDialog order={order} item={reopen} onClose={() => setReopen(null)} /> : null}
+      {previousOf ? (
+        <PreviousDialog item={previousOf} current={drafts[previousOf.id]?.value ?? ''} currentFlag={previewFlag(previousOf)} results={previousByTest.get(previousOf.labTestId) ?? []} onClose={() => setPreviousOf(null)} />
+      ) : null}
     </div>
   )
 }
@@ -362,6 +414,83 @@ function ResultInput({ item, value, disabled, onChange, onKeyDown }: { item: Ord
         </datalist>
       ) : null}
     </>
+  )
+}
+
+/** The patient's last result of this test, with its date; opens the full list. */
+function PreviousCell({ results, onOpen }: { results: PreviousResult[] | undefined; onOpen: () => void }) {
+  const { t, formatDate } = useI18n()
+  const last = results?.[0]
+  if (!last) return <span className="text-xs text-ink-subtle">–</span>
+  return (
+    <button type="button" onClick={onOpen} className="group text-left" title={t('result.previousOpen')}>
+      <span className="flex items-center gap-1.5 whitespace-nowrap">
+        <span className="font-medium text-ink group-hover:text-brand-700 group-hover:underline">{last.value}</span>
+        <FlagBadge flag={last.flag} />
+      </span>
+      <span className="block whitespace-nowrap text-xs text-ink-muted">
+        {formatDate(last.at)}
+        {results.length > 1 ? ` · +${results.length - 1}` : ''}
+      </span>
+    </button>
+  )
+}
+
+function PreviousDialog({ item, current, currentFlag, results, onClose }: {
+  item: OrderItem
+  current: string
+  currentFlag: OrderItem['flag']
+  results: PreviousResult[]
+  onClose: () => void
+}) {
+  const { t, formatDateTime } = useI18n()
+  return (
+    <Modal title={t('result.previousTitle', { code: item.testCode })} description={item.testNameEn} onClose={onClose} size="lg">
+      <p className="mb-3 text-sm text-ink-muted">{t('result.previousHint')}</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="border-b border-rule text-left text-xs font-semibold text-ink-muted">
+            <tr>
+              <th className="py-2 pr-4">{t('order.orderedAt')}</th>
+              <th className="py-2 pr-4">{t('order.no')}</th>
+              <th className="py-2 pr-4">{t('result.value')}</th>
+              <th className="py-2 pr-4">Flag</th>
+              <th className="py-2">{t('result.reference')}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-rule">
+            <tr className="bg-brand-50/50">
+              <td className="py-2 pr-4 font-medium text-ink">{t('result.thisOrder')}</td>
+              <td className="py-2 pr-4" />
+              <td className="py-2 pr-4 font-medium text-ink">
+                {current || '–'} <span className="text-xs text-ink-muted">{item.unit}</span>
+              </td>
+              <td className="py-2 pr-4">
+                <FlagBadge flag={currentFlag} />
+              </td>
+              <td className="py-2 text-xs text-ink-muted">{item.refText ?? ''}</td>
+            </tr>
+            {results.map((r) => (
+              <tr key={`${r.orderId}:${r.at}`}>
+                <td className="whitespace-nowrap py-2 pr-4 text-ink-muted">{formatDateTime(r.at)}</td>
+                <td className="py-2 pr-4">
+                  <Link to={`/lab-orders/${r.orderId}`} className="font-mono text-brand-700 hover:underline">
+                    {r.orderNo}
+                  </Link>
+                </td>
+                <td className="py-2 pr-4 font-medium text-ink">
+                  {r.value} <span className="text-xs text-ink-muted">{r.unit}</span>
+                </td>
+                <td className="py-2 pr-4">
+                  <FlagBadge flag={r.flag} />
+                </td>
+                <td className="py-2 text-xs text-ink-muted">{r.refText ?? '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   )
 }
 

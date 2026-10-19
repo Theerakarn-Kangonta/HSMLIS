@@ -13,6 +13,7 @@ public interface IOrderService
     Task<OrderDetailDto> GetAsync(Guid id, CancellationToken ct = default);
     Task<OrderDetailDto> CreateAsync(CreateOrderRequest request, CancellationToken ct = default);
     Task<OrderDetailDto> CancelAsync(Guid id, CancelOrderRequest request, CancellationToken ct = default);
+    Task<OrderDetailDto> CancelItemAsync(Guid id, Guid itemId, CancelItemRequest request, CancellationToken ct = default);
     Task<SearchResultDto> SearchAsync(string text, CancellationToken ct = default);
 
     Task<PagedResult<OrderSummaryDto>> CheckInAsync(CheckInTab tab, OrderFilter filter, PageRequest page, CancellationToken ct = default);
@@ -39,6 +40,21 @@ internal static class OrderState
         order.Status = status;
         order.Version++;
     }
+
+    /// <summary>What the order charges for one test: its price, or its share of its package's price.</summary>
+    public static decimal ChargeOf(LabOrder order, OrderItem item)
+    {
+        if (item.PackageId is not { } packageId) return item.Price;
+        var package = order.Packages.FirstOrDefault(p => p.PackageId == packageId);
+        if (package is null) return 0;
+        var members = order.Items.Where(i => i.PackageId == packageId).OrderBy(i => i.SortOrder).ThenBy(i => i.Id).ToList();
+        var shares = OrderRules.PackageShares(package.Price, members.Select(i => i.Price).ToList());
+        return shares[members.IndexOf(item)];
+    }
+
+    /// <summary>A package's price less the shares of its tests that were cancelled one by one.</summary>
+    public static decimal PackageCharge(LabOrder order, OrderPackage package) =>
+        package.Price - order.Items.Where(i => i.PackageId == package.PackageId && i.CancelledAt != null).Sum(i => ChargeOf(order, i));
 
     public static void EnsureOpen(LabOrder order)
     {
@@ -151,12 +167,10 @@ public class OrderService(
         }
         if (order.Items.Count == 0)
             throw new BusinessRuleException("order_no_tests", "Choose at least one test or package.");
-        if (request.Discount > subtotal)
-            throw new BusinessRuleException("discount_too_large", "The discount is larger than the total.");
-
+        var discount = OrderRules.OrderDiscount(subtotal, request.DiscountPercent);
         order.Subtotal = subtotal;
-        order.Discount = request.Discount;
-        order.Total = subtotal - request.Discount;
+        order.Discount = discount;
+        order.Total = subtotal - discount;
 
         // Department, then the catalog's own order: the order results are entered and printed in.
         var sort = 0;
@@ -169,7 +183,7 @@ public class OrderService(
         return await unitOfWork.InTransactionAsync(async () =>
         {
             var seq = await sequences.NextAsync(ctx.Org.Id, Numbering.OrderKey(ctx.Today), ct);
-            order.OrderNo = Numbering.OrderNo(ctx.Org.OrderPrefix, ctx.Today, seq);
+            order.OrderNo = Numbering.OrderNo(ctx.Today, seq);
 
             // One container per kind of specimen, numbered in specimen-code order.
             var index = 0;
@@ -224,6 +238,63 @@ public class OrderService(
         }
         OrderState.Refresh(order, ctx.Now);
         audit.Write(ctx, "order.cancel", "order", order.Id.ToString(), $"{order.OrderNo}: {order.CancelReason}");
+        await unitOfWork.SaveChangesAsync(ct);
+        return await DetailAsync(order, ctx, ct);
+    }
+
+    /// <summary>
+    /// Cancels one test: it will not be done and comes off the bill (a package test at its share of the
+    /// package price). An approved result must be reopened first, and the last test means cancelling the order.
+    /// </summary>
+    public async Task<OrderDetailDto> CancelItemAsync(Guid id, Guid itemId, CancelItemRequest request, CancellationToken ct = default)
+    {
+        var ctx = await context.GetAsync(ct);
+        var order = await Find(id, ct);
+        OrderState.EnsureOpen(order);
+        var item = order.Items.FirstOrDefault(i => i.Id == itemId)
+            ?? throw new NotFoundException("result_not_found", "Test not found on this order.");
+        if (item.ResultStatus == ResultStatus.Cancelled)
+            throw new ConflictException("result_cancelled", "This test was already cancelled.");
+        if (item.ResultStatus == ResultStatus.Approved)
+            throw new ConflictException("result_approved", "This result is approved. Reopen it first.");
+        if (!order.Items.Any(i => i.Id != item.Id && i.ResultStatus != ResultStatus.Cancelled))
+            throw new BusinessRuleException("last_test", "This is the order's last test. Cancel the whole order instead.");
+
+        var subtotal = order.Subtotal - OrderState.ChargeOf(order, item);
+        var discount = order.Subtotal == 0 ? 0 : Math.Round(order.Discount * subtotal / order.Subtotal, 2, MidpointRounding.AwayFromZero);
+        var total = subtotal - discount;
+        var invoice = await invoices.GetByOrderAsync(order.Id, ct);
+        if (invoice is { Status: not InvoiceStatus.Cancelled } && invoice.Paid > total)
+            throw new ConflictException("order_has_payments", "More was paid than the order would cost. Refund the difference first.");
+
+        var reason = request.Reason.Trim();
+        item.ResultStatus = ResultStatus.Cancelled;
+        item.CancelledAt = ctx.Now;
+        item.CancelledByName = ctx.UserName;
+        item.CancelReason = reason;
+        order.Subtotal = subtotal;
+        order.Discount = discount;
+        order.Total = total;
+        if (invoice is { Status: not InvoiceStatus.Cancelled })
+        {
+            invoice.Amount = total;
+            invoice.Status = invoice.Paid >= total ? InvoiceStatus.Paid : invoice.Paid > 0 ? InvoiceStatus.Partial : InvoiceStatus.Unpaid;
+            invoice.Version++;
+        }
+        orders.AddEvent(new ResultEvent
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = ctx.Org.Id,
+            OrderItemId = item.Id,
+            Action = "cancel",
+            Value = item.Value,
+            Flag = item.Flag,
+            UserId = ctx.User.Id,
+            UserName = ctx.UserName,
+            At = ctx.Now,
+        });
+        OrderState.Refresh(order, ctx.Now);
+        audit.Write(ctx, "order.cancel_test", "order", order.Id.ToString(), $"{order.OrderNo} {item.TestCode}: {reason}");
         await unitOfWork.SaveChangesAsync(ct);
         return await DetailAsync(order, ctx, ct);
     }

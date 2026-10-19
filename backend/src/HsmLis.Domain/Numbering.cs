@@ -8,8 +8,9 @@ public static class Numbering
     private static string Day(DateOnly d) => d.ToString("yyMMdd", CultureInfo.InvariantCulture);
     private static string Month(DateOnly d) => d.ToString("yyMM", CultureInfo.InvariantCulture);
 
-    public static string OrderKey(DateOnly day) => $"order:{Day(day)}";
-    public static string OrderNo(string prefix, DateOnly day, int seq) => $"{prefix}{Day(day)}{seq:D4}";
+    /// <summary>Order numbers run per month: YYMM + 4 digits, e.g. 26100001.</summary>
+    public static string OrderKey(DateOnly day) => $"order:{Month(day)}";
+    public static string OrderNo(DateOnly day, int seq) => $"{Month(day)}{seq:D4}";
 
     /// <summary>One container's lab sample number: the order number plus -01, -02…</summary>
     public static string Lsn(string orderNo, int index) => $"{orderNo}-{index:D2}";

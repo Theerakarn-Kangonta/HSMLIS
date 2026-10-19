@@ -40,7 +40,6 @@ public record OrganizationDto(
     string? TaxId,
     string? Address,
     string TimeZone,
-    string OrderPrefix,
     int AutoLogoutMinutes);
 
 /// <summary>Who is signed in, their organization, and what they may do.</summary>
@@ -99,7 +98,6 @@ public record OrganizationRequest(
     [StringLength(20)] string? TaxId,
     [StringLength(400)] string? Address,
     [Required, StringLength(64)] string TimeZone,
-    [Required, StringLength(12, MinimumLength = 1), RegularExpression("^[A-Z0-9]+$")] string OrderPrefix,
     [Range(5, 240)] int AutoLogoutMinutes);
 
 public record BranchDto(Guid Id, string Code, string NameTh, string? NameEn, string? Address, string? Phone, string? Email, string? TaxId, bool IsActive);
@@ -296,7 +294,7 @@ public record CreateOrderRequest(
     [Range(30, 250)] decimal? HeightCm,
     [MaxLength(30)] List<Guid>? PackageIds,
     [MaxLength(200)] List<Guid>? TestIds,
-    [Range(0, 1_000_000)] decimal Discount);
+    [Range(0, 100)] decimal DiscountPercent);
 
 public record OrderSummaryDto(
     Guid Id,
@@ -373,7 +371,10 @@ public record OrderItemDto(
     DateTime? VerifiedAt,
     string? VerifiedByName,
     DateTime? ApprovedAt,
-    string? ApprovedByName);
+    string? ApprovedByName,
+    DateTime? CancelledAt,
+    string? CancelledByName,
+    string? CancelReason);
 
 public record InvoiceSummaryDto(Guid Id, string InvoiceNo, decimal Amount, decimal Paid, InvoiceStatus Status);
 
@@ -441,6 +442,33 @@ public enum WorklistStage
 
 public record CancelOrderRequest([Required, StringLength(300)] string Reason);
 
+/// <summary>Cancels one test of an order; the rest of the order goes on.</summary>
+public record CancelItemRequest([Required, StringLength(300)] string Reason);
+
+/// <summary>
+/// One row of the results worklist: the tests of one department on one order. Each department is
+/// entered, verified and approved on its own, so one click never signs off another department's work.
+/// </summary>
+public record WorklistRowDto(
+    Guid OrderId,
+    string OrderNo,
+    Guid PatientId,
+    string Hn,
+    string PatientName,
+    string? ReferrerName,
+    OrderStatus Status,
+    bool Urgent,
+    DateTime OrderedAt,
+    DateTime? ReceivedAt,
+    Guid DepartmentId,
+    string DepartmentName,
+    string DepartmentColor,
+    int ItemCount,
+    int EnteredCount,
+    int VerifiedCount,
+    int ApprovedCount,
+    bool HasCritical);
+
 public record ContainerIdsRequest([MaxLength(50)] List<Guid>? ContainerIds);
 
 public record ReceiveRequest(
@@ -470,6 +498,9 @@ public record ReopenRequest(int Version, Guid ItemId, [Required, StringLength(30
 public record ResultActionResponse(OrderDetailDto Order, int Done, int Skipped, string? SkippedReason);
 
 public record ResultEventDto(string Action, string? Value, ResultFlag Flag, string UserName, DateTime At);
+
+/// <summary>An approved result of the same test from one of the patient's earlier orders, newest first.</summary>
+public record PreviousResultDto(Guid LabTestId, Guid OrderId, string OrderNo, string Value, ResultFlag Flag, string? Unit, string? RefText, DateTime At);
 
 public record ResultsKpiDto(int PendingEntry, int PendingVerify, int PendingApprove, int CriticalOpen);
 
@@ -551,3 +582,12 @@ public record DashboardDto(
 public record AuditLogDto(Guid Id, DateTime At, string UserName, string Action, string EntityType, string? EntityId, string? Detail);
 
 public record AuditFilter(string? Search = null, string? Action = null, string? EntityType = null, DateOnly? From = null, DateOnly? To = null);
+
+// ---------- label printing (QZ Tray) ----------
+
+public record QzCertificateDto(string Certificate);
+
+/// <summary>QZ Tray asks to sign a SHA-256 hash of each call (64 hex characters).</summary>
+public record QzSignRequest([Required, MaxLength(256)] string Data);
+
+public record QzSignatureDto(string Signature);

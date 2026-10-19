@@ -36,10 +36,12 @@ public class BillingService(
         var order = await orders.GetAsync(invoice.LabOrderId, ct) ?? throw new NotFoundException("order_not_found", "Order not found.");
 
         // A package is one line at its package price; tests ordered on their own are a line each.
+        // Tests cancelled one by one are left out (a package line drops by their share), so the lines add up to the subtotal.
         var lines = order.Packages
-            .Select(p => new InvoiceLineDto(p.Code, p.Name, p.Price, p.Code))
+            .Where(p => order.Items.Any(i => i.PackageId == p.PackageId && i.CancelledAt == null))
+            .Select(p => new InvoiceLineDto(p.Code, p.Name, OrderState.PackageCharge(order, p), p.Code))
             .Concat(order.Items
-                .Where(i => i.PackageId is null)
+                .Where(i => i.PackageId is null && i.CancelledAt == null)
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new InvoiceLineDto(i.TestCode, i.TestNameTh ?? i.TestNameEn, i.Price, null)))
             .ToList();

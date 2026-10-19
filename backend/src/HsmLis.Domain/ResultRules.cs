@@ -174,6 +174,31 @@ public static class OrderRules
         var discount = type == DiscountType.Percent ? Math.Round(listPrice * Math.Clamp(value, 0, 100) / 100m, 2) : value;
         return Math.Max(0, listPrice - discount);
     }
+
+    /// <summary>
+    /// Splits a package's price over its tests in proportion to their list prices, rounded to satang.
+    /// The last test takes the rounding remainder, so the shares always add up to the package price.
+    /// </summary>
+    public static decimal[] PackageShares(decimal packagePrice, IReadOnlyList<decimal> listPrices)
+    {
+        var shares = new decimal[listPrices.Count];
+        if (shares.Length == 0) return shares;
+        var listTotal = listPrices.Sum();
+        decimal given = 0;
+        for (var i = 0; i < shares.Length - 1; i++)
+        {
+            shares[i] = listTotal == 0
+                ? Math.Round(packagePrice / shares.Length, 2, MidpointRounding.AwayFromZero)
+                : Math.Round(packagePrice * listPrices[i] / listTotal, 2, MidpointRounding.AwayFromZero);
+            given += shares[i];
+        }
+        shares[^1] = packagePrice - given;
+        return shares;
+    }
+
+    /// <summary>The baht taken off an order for a percentage discount, rounded to satang.</summary>
+    public static decimal OrderDiscount(decimal subtotal, decimal percent) =>
+        Math.Round(subtotal * Math.Clamp(percent, 0, 100) / 100m, 2, MidpointRounding.AwayFromZero);
 }
 
 public static class PasswordPolicy

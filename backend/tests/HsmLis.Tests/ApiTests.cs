@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HsmLis.Application.Common;
@@ -21,6 +24,13 @@ namespace HsmLis.Tests;
 public class ApiFactory : WebApplicationFactory<Program>
 {
     private const string DatabaseName = "hsmlis_test";
+
+    /// <summary>The QZ Tray signing key the test server is given; tests check signatures with it.</summary>
+    public static readonly RSA QzKey = RSA.Create(2048);
+
+    public static readonly string QzCertificate = new CertificateRequest("CN=HSMLIS test", QzKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
+        .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1))
+        .ExportCertificatePem();
 
     private static readonly string DatabaseServer =
         Environment.GetEnvironmentVariable("TEST_DATABASE_SERVER")
@@ -46,6 +56,9 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimit:AuthPerMinute", "100000");
         builder.UseSetting("RateLimit:RequestsPerMinute", "100000");
         builder.UseSetting("Cors:AllowedOrigins:0", "https://app.example.com");
+        // Written with \n instead of line breaks, the way it is pasted into one environment variable.
+        builder.UseSetting("Qz:Certificate", QzCertificate.Replace("\n", "\\n"));
+        builder.UseSetting("Qz:PrivateKey", QzKey.ExportPkcs8PrivateKeyPem().Replace("\n", "\\n"));
     }
 
     /// <summary>A browser-like client: keeps the session cookie (HTTPS, as the cookie is Secure) and sends the app's header.</summary>
@@ -68,7 +81,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
     private static int _counter;
 
-    private record Lab(Guid OrgId, string Prefix, Dictionary<UserRole, string> Usernames);
+    private record Lab(Guid OrgId, string Code, Dictionary<UserRole, string> Usernames);
 
     /// <summary>A new organization with one user per role, written straight to the database.</summary>
     private async Task<Lab> NewLabAsync()
@@ -77,7 +90,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-        var org = new Organization { Id = Guid.NewGuid(), Code = $"T{n}", NameTh = $"Lab {n}", OrderPrefix = $"T{n}X", CreatedAt = DateTime.UtcNow };
+        var org = new Organization { Id = Guid.NewGuid(), Code = $"T{n}", NameTh = $"Lab {n}", CreatedAt = DateTime.UtcNow };
         db.Organizations.Add(org);
         var names = new Dictionary<UserRole, string>();
         foreach (var role in Enum.GetValues<UserRole>())
@@ -98,7 +111,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
             });
         }
         await db.SaveChangesAsync();
-        return new Lab(org.Id, org.OrderPrefix, names);
+        return new Lab(org.Id, org.Code, names);
     }
 
     private async Task<HttpClient> SignInAsync(Lab lab, UserRole role)
@@ -172,6 +185,30 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Qz_signing_is_for_staff_who_print_labels()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await factory.NewClient().GetAsync("/api/qz/certificate")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await factory.NewClient().PostAsJsonAsync("/api/qz/sign", new QzSignRequest("abc"))).StatusCode);
+
+        var lab = await NewLabAsync();
+        var cashier = await SignInAsync(lab, UserRole.Cashier);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync("/api/qz/certificate")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync("/api/qz/sign", new QzSignRequest("abc"))).StatusCode);
+
+        var receptionist = await SignInAsync(lab, UserRole.Receptionist);
+        var certificate = await Read<QzCertificateDto>(await receptionist.GetAsync("/api/qz/certificate"));
+        Assert.Equal(ApiFactory.QzCertificate.Trim(), certificate.Certificate);
+
+        const string hash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        var signed = await Post<QzSignatureDto>(receptionist, "/api/qz/sign", new QzSignRequest(hash));
+        Assert.True(ApiFactory.QzKey.VerifyData(
+            Encoding.UTF8.GetBytes(hash), Convert.FromBase64String(signed.Signature), HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1));
+
+        var tooLong = await receptionist.PostAsJsonAsync("/api/qz/sign", new QzSignRequest(new string('a', 257)));
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+    }
+
+    [Fact]
     public async Task Roles_limit_what_can_be_done()
     {
         var lab = await NewLabAsync();
@@ -182,12 +219,12 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         var branchAdmin = await SignInAsync(lab, UserRole.BranchAdmin);
         var escalate = await branchAdmin.PostAsJsonAsync("/api/users", new CreateUserRequest(
-            $"boss{lab.Prefix}", Password, "ใหญ่", "สุด", null, null, null, null, null, null, null, UserRole.SuperAdmin, null), Json);
+            $"boss{lab.Code}", Password, "ใหญ่", "สุด", null, null, null, null, null, null, null, UserRole.SuperAdmin, null), Json);
         Assert.Equal(HttpStatusCode.Forbidden, escalate.StatusCode);
         Assert.Equal("role_not_allowed", await ErrorCode(escalate));
 
         var weak = await branchAdmin.PostAsJsonAsync("/api/users", new CreateUserRequest(
-            $"weak{lab.Prefix}", "short", "อ่อน", "แอ", null, null, null, null, null, null, null, UserRole.Receptionist, null), Json);
+            $"weak{lab.Code}", "short", "อ่อน", "แอ", null, null, null, null, null, null, null, UserRole.Receptionist, null), Json);
         Assert.Equal("password_too_short", await ErrorCode(weak));
     }
 
@@ -222,10 +259,11 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         var order = await Post<OrderDetailDto>(reception, "/api/orders", new CreateOrderRequest(
             patient.Id, null, null, null, false, null, null, null, null, null, null, 70, 175, null, [glucose.Id, hiv.Id], 10));
-        Assert.Matches($"^{lab.Prefix}\\d{{10}}$", order.OrderNo);
+        Assert.Equal(19, order.Discount);
+        Assert.Matches("^\\d{8}$", order.OrderNo);
         var container = Assert.Single(order.Containers);
         Assert.Equal($"{order.OrderNo}-01", container.Lsn);
-        Assert.Equal(180, order.Total);
+        Assert.Equal(171, order.Total);
         Assert.Equal(22.9m, order.Bmi);
         Assert.Equal(InvoiceStatus.Unpaid, order.Invoice!.Status);
 
@@ -289,7 +327,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal("payment_too_large", await ErrorCode(tooMuch));
         var part = await Post<InvoiceDto>(cashier, $"/api/billing/invoices/{invoice.Id}/pay", new PayRequest(invoice.Version, 100, PaymentMethod.Cash, null));
         Assert.Equal(InvoiceStatus.Partial, part.Status);
-        var full = await Post<InvoiceDto>(cashier, $"/api/billing/invoices/{invoice.Id}/pay", new PayRequest(part.Version, 80, PaymentMethod.PromptPay, null));
+        var full = await Post<InvoiceDto>(cashier, $"/api/billing/invoices/{invoice.Id}/pay", new PayRequest(part.Version, 71, PaymentMethod.PromptPay, null));
         Assert.Equal(InvoiceStatus.Paid, full.Status);
         Assert.Equal(0, full.Balance);
 
@@ -323,6 +361,113 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         order = await Post<OrderDetailDto>(admin, $"/api/orders/{order.Id}/cancel", new CancelOrderRequest("ผู้ป่วยไม่มาเก็บตัวอย่าง"));
         Assert.Equal(OrderStatus.Cancelled, order.Status);
         Assert.Equal(InvoiceStatus.Cancelled, order.Invoice!.Status);
+    }
+
+    [Fact]
+    public async Task One_test_can_be_cancelled_and_each_department_is_worked_on_its_own()
+    {
+        var lab = await NewLabAsync();
+        var admin = await SignInAsync(lab, UserRole.SuperAdmin);
+        var (glucose, hiv) = await CatalogAsync(admin);
+        var hemato = await Post<DepartmentDto>(admin, "/api/departments", new DepartmentRequest("007", "Hematology", "โลหิตวิทยา", "#ef4444", null, true));
+        var wbc = await Post<LabTestDto>(admin, "/api/lab-tests", new LabTestRequest(
+            "WBC", hemato.Id, "White blood cell count", null, glucose.SpecimenTypeId, "x10^3/uL", 60, ResultType.Numeric, null, 1, 4, 0, false, [], true, 0));
+        var patient = await Post<PatientDto>(admin, "/api/patients", NewPatient("แยกแผนก"));
+        var order = await Post<OrderDetailDto>(admin, "/api/orders", new CreateOrderRequest(
+            patient.Id, null, null, null, false, null, null, null, null, null, null, null, null, null, [glucose.Id, hiv.Id, wbc.Id], 10));
+        Assert.Equal((250m, 25m, 225m), (order.Subtotal, order.Discount, order.Total));
+        var glu = order.Items.Single(i => i.TestCode == "GLU");
+        var cancelUrl = $"/api/orders/{order.Id}/items/{glu.Id}/cancel";
+
+        // A cashier may not, and another laboratory cannot even find the order.
+        var cashier = await SignInAsync(lab, UserRole.Cashier);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.PostAsJsonAsync(cancelUrl, new CancelItemRequest("x"), Json)).StatusCode);
+        var otherAdmin = await SignInAsync(await NewLabAsync(), UserRole.SuperAdmin);
+        var foreign = await otherAdmin.PostAsJsonAsync(cancelUrl, new CancelItemRequest("x"), Json);
+        Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+        Assert.Equal("order_not_found", await ErrorCode(foreign));
+
+        // The cancelled test comes off the bill, and the order's discount shrinks with it.
+        order = await Post<OrderDetailDto>(admin, cancelUrl, new CancelItemRequest("แพทย์ยกเลิก"));
+        glu = order.Items.Single(i => i.Id == glu.Id);
+        Assert.Equal(ResultStatus.Cancelled, glu.ResultStatus);
+        Assert.Equal("แพทย์ยกเลิก", glu.CancelReason);
+        Assert.NotNull(glu.CancelledAt);
+        Assert.Equal((210m, 21m, 189m), (order.Subtotal, order.Discount, order.Total));
+        Assert.Equal(189, order.Invoice!.Amount);
+        Assert.Equal(OrderStatus.AwaitingCollection, order.Status);
+        var bill = await Read<InvoiceDetailDto>(await admin.GetAsync($"/api/billing/invoices/{order.Invoice.Id}"));
+        Assert.DoesNotContain(bill.Lines, l => l.Code == "GLU");
+        Assert.Equal(order.Subtotal, bill.Lines.Sum(l => l.Price));
+        Assert.Equal("result_cancelled", await ErrorCode(await admin.PostAsJsonAsync(cancelUrl, new CancelItemRequest("again"), Json)));
+
+        // Received: the worklist has one row per department, and only the cancelled test is gone.
+        order = await Post<OrderDetailDto>(admin, $"/api/checkin/{order.Id}/receive", new ReceiveRequest(null, null, null, null));
+        var all = await Read<PagedResult<WorklistRowDto>>(await admin.GetAsync($"/api/results?stage=All&search={order.OrderNo}"));
+        Assert.Equal(2, all.Total);
+        var chem = all.Items.Single(r => r.DepartmentName == "Chemistry");
+        Assert.Equal(1, chem.ItemCount);
+        Assert.Equal(1, all.Items.Single(r => r.DepartmentId == hemato.Id).ItemCount);
+        var hivItem = order.Items.Single(i => i.TestCode == "AHIV");
+        var wbcItem = order.Items.Single(i => i.TestCode == "WBC");
+
+        // Verifying one department leaves the other department's results alone.
+        var saved = await Post<ResultActionResponse>(admin, $"/api/results/{order.Id}", new SaveResultsRequest(order.Version,
+            [new ResultInput(hivItem.Id, "Non Reactive", null), new ResultInput(wbcItem.Id, "7.5", null)]));
+        var verified = await Post<ResultActionResponse>(admin, $"/api/results/{order.Id}/verify", new ResultActionRequest(saved.Order.Version, [wbcItem.Id]));
+        Assert.Equal(1, verified.Done);
+        Assert.Equal(ResultStatus.Entered, verified.Order.Items.Single(i => i.Id == hivItem.Id).ResultStatus);
+        var toVerify = await Read<PagedResult<WorklistRowDto>>(await admin.GetAsync($"/api/results?stage=Verify&search={order.OrderNo}"));
+        Assert.Equal(chem.DepartmentId, Assert.Single(toVerify.Items).DepartmentId);
+        var byDepartment = await Read<PagedResult<WorklistRowDto>>(await admin.GetAsync($"/api/results?stage=All&search={order.OrderNo}&departmentId={hemato.Id}"));
+        Assert.Equal(hemato.Id, Assert.Single(byDepartment.Items).DepartmentId);
+
+        // The last test left cannot be cancelled on its own.
+        order = await Post<OrderDetailDto>(admin, $"/api/orders/{order.Id}/items/{hivItem.Id}/cancel", new CancelItemRequest("ตัวอย่างไม่พอ"));
+        var last = await admin.PostAsJsonAsync($"/api/orders/{order.Id}/items/{wbcItem.Id}/cancel", new CancelItemRequest("x"), Json);
+        Assert.Equal("last_test", await ErrorCode(last));
+
+        var history = await Read<List<ResultEventDto>>(await admin.GetAsync($"/api/results/{order.Id}/items/{hivItem.Id}/history"));
+        Assert.Equal("cancel", history[0].Action);
+    }
+
+    [Fact]
+    public async Task The_result_screen_shows_the_patients_earlier_results()
+    {
+        var lab = await NewLabAsync();
+        var admin = await SignInAsync(lab, UserRole.SuperAdmin);
+        var (glucose, hiv) = await CatalogAsync(admin);
+        var patient = await Post<PatientDto>(admin, "/api/patients", NewPatient("ผลเก่า"));
+        var manager = await SignInAsync(lab, UserRole.LabManager);
+        var doctor = await SignInAsync(lab, UserRole.Doctor);
+
+        async Task<OrderDetailDto> ApprovedGlucose(string value)
+        {
+            var o = await Post<OrderDetailDto>(admin, "/api/orders", new CreateOrderRequest(
+                patient.Id, null, null, null, false, null, null, null, null, null, null, null, null, null, [glucose.Id], 0));
+            o = await Post<OrderDetailDto>(admin, $"/api/checkin/{o.Id}/receive", new ReceiveRequest(null, null, null, null));
+            var saved = await Post<ResultActionResponse>(manager, $"/api/results/{o.Id}", new SaveResultsRequest(o.Version, [new ResultInput(o.Items[0].Id, value, null)]));
+            var verified = await Post<ResultActionResponse>(manager, $"/api/results/{o.Id}/verify", new ResultActionRequest(saved.Order.Version, null));
+            return (await Post<ResultActionResponse>(doctor, $"/api/results/{o.Id}/approve", new ResultActionRequest(verified.Order.Version, null))).Order;
+        }
+
+        var first = await ApprovedGlucose("90");
+        await ApprovedGlucose("120");
+        var current = await Post<OrderDetailDto>(admin, "/api/orders", new CreateOrderRequest(
+            patient.Id, null, null, null, false, null, null, null, null, null, null, null, null, null, [glucose.Id, hiv.Id], 0));
+
+        // Newest first, only approved results of earlier orders, nothing for a test never done before.
+        var previous = await Read<List<PreviousResultDto>>(await manager.GetAsync($"/api/results/{current.Id}/previous"));
+        Assert.Equal(["120", "90"], previous.Select(p => p.Value));
+        Assert.All(previous, p => Assert.Equal(glucose.Id, p.LabTestId));
+        Assert.Equal(ResultFlag.High, previous[0].Flag);
+        // An older order does not see results that came after it.
+        Assert.Empty(await Read<List<PreviousResultDto>>(await manager.GetAsync($"/api/results/{first.Id}/previous")));
+
+        var cashier = await SignInAsync(lab, UserRole.Cashier);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync($"/api/results/{current.Id}/previous")).StatusCode);
+        var otherLab = await SignInAsync(await NewLabAsync(), UserRole.SuperAdmin);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherLab.GetAsync($"/api/results/{current.Id}/previous")).StatusCode);
     }
 
     [Fact]

@@ -31,3 +31,8 @@ services:
         sync: false
       - key: Bootstrap__AdminPassword
         sync: false
+      # Silent label printing with QZ Tray: from printing/new-certificate.sh (see README).
+      - key: Qz__Certificate
+        sync: false
+      - key: Qz__PrivateKey
+        sync: false

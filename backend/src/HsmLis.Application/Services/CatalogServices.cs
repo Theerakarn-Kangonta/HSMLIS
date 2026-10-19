@@ -299,7 +299,6 @@ public class OrganizationService(IUnitOfWork unitOfWork, IOrgContextProvider con
         org.TaxId = Text.Clean(request.TaxId);
         org.Address = Text.Clean(request.Address);
         org.TimeZone = request.TimeZone;
-        org.OrderPrefix = request.OrderPrefix;
         org.AutoLogoutMinutes = request.AutoLogoutMinutes;
         audit.Write(ctx, "organization.update", "organization", org.Id.ToString());
         await unitOfWork.SaveChangesAsync(ct);

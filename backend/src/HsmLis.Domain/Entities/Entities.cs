@@ -127,7 +127,6 @@ public class Organization
     /// <summary>IANA time zone deciding what "today" is for order numbers and reports.</summary>
     public string TimeZone { get; set; } = "Asia/Bangkok";
     /// <summary>Start of every order number, e.g. CENTER → CENTER2609210001.</summary>
-    public string OrderPrefix { get; set; } = "CENTER";
     /// <summary>Signed-in screens sign out after this many idle minutes.</summary>
     public int AutoLogoutMinutes { get; set; } = 20;
     public DateTime CreatedAt { get; set; }
@@ -317,7 +316,7 @@ public class LabOrder : IOrgOwned
 {
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
-    /// <summary>Prefix + YYMMDD + running number, e.g. CENTER2609210001.</summary>
+    /// <summary>YYMM + running number for the month, e.g. 26100001.</summary>
     public string OrderNo { get; set; } = "";
     public Guid PatientId { get; set; }
     public Patient? Patient { get; set; }
@@ -408,6 +407,10 @@ public class OrderItem : IOrgOwned
     public DateTime? ApprovedAt { get; set; }
     public Guid? ApprovedById { get; set; }
     public string? ApprovedByName { get; set; }
+    /// <summary>Set when this one test was cancelled (the rest of the order goes on).</summary>
+    public DateTime? CancelledAt { get; set; }
+    public string? CancelledByName { get; set; }
+    public string? CancelReason { get; set; }
 }
 
 /// <summary>One tube or pot. Its LSN (order number + -01, -02…) is the barcode on its label.</summary>

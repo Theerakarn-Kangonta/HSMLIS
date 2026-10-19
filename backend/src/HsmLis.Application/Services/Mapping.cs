@@ -12,7 +12,7 @@ public static class Map
         u.Email, u.Phone, u.EmployeeCode, u.BranchId, u.Role, u.DepartmentIds, u.IsActive, u.CreatedAt);
 
     public static OrganizationDto ToDto(this Organization o) => new(
-        o.Id, o.Code, o.NameTh, o.NameEn, o.Email, o.Phone, o.TaxId, o.Address, o.TimeZone, o.OrderPrefix, o.AutoLogoutMinutes);
+        o.Id, o.Code, o.NameTh, o.NameEn, o.Email, o.Phone, o.TaxId, o.Address, o.TimeZone, o.AutoLogoutMinutes);
 
     public static BranchDto ToDto(this Branch b) => new(b.Id, b.Code, b.NameTh, b.NameEn, b.Address, b.Phone, b.Email, b.TaxId, b.IsActive);
 
@@ -71,7 +71,7 @@ public static class Map
             department?.NameEn ?? "", department?.Color ?? "#64748b", i.SpecimenTypeId, i.ContainerId, i.ResultType, i.Options,
             i.Decimals, i.Unit, i.Price, i.TatTargetHours, i.ResultStatus, i.Value, i.Flag, i.RefLow, i.RefHigh, i.CriticalLow,
             i.CriticalHigh, i.RefText, i.Comment, i.EnteredAt, i.EnteredByName, i.VerifiedAt, i.VerifiedByName, i.ApprovedAt,
-            i.ApprovedByName);
+            i.ApprovedByName, i.CancelledAt, i.CancelledByName, i.CancelReason);
     }
 
     public static ContainerDto ToDto(this SpecimenContainer c, IEnumerable<OrderItem> items) => new(

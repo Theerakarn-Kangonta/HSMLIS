@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronDown, PackageOpen, Plus, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PatientPicker } from '../../components/PatientPicker'
 import { Badge, Button, Card, CardHeader, Checkbox, ColorDot, ErrorNote, Field, Input, PageHeader, SearchInput, Select, Textarea, focusRing, useToast } from '../../components/ui'
@@ -8,7 +8,33 @@ import { api, type Patient } from '../../lib/api'
 import { useDepartments, useLabTests, usePackages, useReferrers } from '../../lib/catalog'
 import { useI18n } from '../../lib/i18n'
 
-const ENTITLEMENTS = ['ชำระเงินเอง', 'บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ต้นสังกัด', 'อื่น ๆ']
+/**
+ * Limits a sticky side panel to the visible part of the window below its top edge, so its bottom
+ * (the Confirm button) is always on screen. Only applies at the xl breakpoint, where the panel is sticky.
+ */
+function useFitToWindow<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const wide = window.matchMedia('(min-width: 80rem)')
+    const fit = () => {
+      el.style.maxHeight = wide.matches ? `${window.innerHeight - el.getBoundingClientRect().top - 16}px` : ''
+    }
+    fit()
+    window.addEventListener('scroll', fit, { passive: true })
+    window.addEventListener('resize', fit)
+    wide.addEventListener('change', fit)
+    return () => {
+      window.removeEventListener('scroll', fit)
+      window.removeEventListener('resize', fit)
+      wide.removeEventListener('change', fit)
+    }
+  }, [])
+  return ref
+}
+
+const ENTITLEMENTS =['ชำระเงินเอง', 'บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ต้นสังกัด', 'อื่น ๆ']
 
 const num = (s: string) => (s.trim() === '' ? null : Number(s))
 
@@ -48,7 +74,9 @@ export function NewOrderPage() {
   const inPackage = new Set(chosenPackages.flatMap((p) => p.testIds))
   const standalone = testIds.filter((id) => !inPackage.has(id))
   const subtotal = chosenPackages.reduce((s, p) => s + p.price, 0) + standalone.reduce((s, id) => s + (testsById.get(id)?.price ?? 0), 0)
-  const discountValue = Math.min(subtotal, Math.max(0, Number(discount) || 0))
+  const discountPercent = Math.min(100, Math.max(0, Number(discount) || 0))
+  // Mirrors OrderRules.OrderDiscount on the server.
+  const discountValue = Math.round(subtotal * discountPercent) / 100
   const total = subtotal - discountValue
   const itemCount = inPackage.size + standalone.length
 
@@ -88,7 +116,7 @@ export function NewOrderPage() {
         heightCm: num(visit.height),
         packageIds,
         testIds: standalone,
-        discount: discountValue,
+        discountPercent,
       }),
     onSuccess: (order) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] })
@@ -98,6 +126,7 @@ export function NewOrderPage() {
   })
 
   const setV = (patch: Partial<typeof visit>) => setVisit({ ...visit, ...patch })
+  const summaryRef = useFitToWindow<HTMLDivElement>()
 
   return (
     <div>
@@ -246,9 +275,11 @@ export function NewOrderPage() {
           </Card>
         </div>
 
-        <Card className="xl:sticky xl:top-20">
+        <div ref={summaryRef} className="xl:sticky xl:top-20 xl:flex xl:flex-col">
+        <Card className="xl:flex xl:min-h-0 xl:flex-col">
           <CardHeader title={t('order.summary', { n: itemCount })} />
-          <div className="space-y-4 p-5">
+          {/* On wide screens the items and inputs scroll inside the card so the totals and Confirm stay visible. */}
+          <div className="space-y-4 p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
             {chosenPackages.length === 0 && standalone.length === 0 ? <p className="text-sm text-ink-muted">{t('order.nothingChosen')}</p> : null}
             <ul className="space-y-2">
               {chosenPackages.map((p) => (
@@ -291,11 +322,13 @@ export function NewOrderPage() {
               <Field label={t('common.note')}>
                 <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} />
               </Field>
-              <Field label={t('order.discount')}>
-                <Input inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" />
+              <Field label={t('order.discountPercent')}>
+                <Input type="number" min={0} max={100} step="0.01" inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
               </Field>
             </div>
-            <dl className="space-y-1 border-t border-rule pt-4 text-sm">
+          </div>
+          <div className="space-y-4 border-t border-rule p-5 xl:shrink-0">
+            <dl className="space-y-1 text-sm">
               <div className="flex justify-between text-ink-muted">
                 <dt>{t('order.subtotal')}</dt>
                 <dd className="tabular-nums">{formatMoney(subtotal)}</dd>
@@ -316,6 +349,7 @@ export function NewOrderPage() {
             {!patient ? <p className="text-center text-xs text-ink-muted">{t('order.needPatient')}</p> : null}
           </div>
         </Card>
+        </div>
       </div>
     </div>
   )

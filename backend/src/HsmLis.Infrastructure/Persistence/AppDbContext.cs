@@ -98,7 +98,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser c
             e.Property(x => x.TaxId).HasMaxLength(20);
             e.Property(x => x.Address).HasMaxLength(400);
             e.Property(x => x.TimeZone).HasMaxLength(64);
-            e.Property(x => x.OrderPrefix).HasMaxLength(12);
         });
 
         b.Entity<Branch>(e =>
@@ -260,6 +259,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser c
             e.Property(x => x.EnteredByName).HasMaxLength(170);
             e.Property(x => x.VerifiedByName).HasMaxLength(170);
             e.Property(x => x.ApprovedByName).HasMaxLength(170);
+            e.Property(x => x.CancelledByName).HasMaxLength(170);
+            e.Property(x => x.CancelReason).HasMaxLength(300);
             // Reference limits keep the precision they were set with.
             e.Property(x => x.RefLow).HasPrecision(18, 6);
             e.Property(x => x.RefHigh).HasPrecision(18, 6);

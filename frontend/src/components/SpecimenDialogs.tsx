@@ -91,7 +91,7 @@ export function CollectDialog({ order, onClose }: { order: OrderDetail; onClose:
 }
 
 /** Receive containers into the lab, noting their volume and condition. */
-export function ReceiveDialog({ order, onClose }: { order: OrderDetail; onClose: () => void }) {
+export function ReceiveDialog({ order, onClose, onAllReceived }: { order: OrderDetail; onClose: () => void; onAllReceived?: (order: OrderDetail) => void }) {
   const { t } = useI18n()
   const toast = useToast()
   const changed = useSpecimenChanged()
@@ -103,7 +103,10 @@ export function ReceiveDialog({ order, onClose }: { order: OrderDetail; onClose:
     onSuccess: (o) => {
       changed(o)
       toast(t('specimen.receivedToast'))
-      if (!o.containers.some((c) => c.status === 'Pending' || c.status === 'Collected')) onClose()
+      if (!o.containers.some((c) => c.status === 'Pending' || c.status === 'Collected')) {
+        onClose()
+        onAllReceived?.(o)
+      }
     },
   })
   const open = order.containers.filter((c) => c.status === 'Pending' || c.status === 'Collected')

@@ -91,13 +91,16 @@ public interface ILabOrderRepository
     Task<LabOrder?> GetAsync(Guid id, CancellationToken ct = default);
     Task<PagedResult<OrderSummaryDto>> PageAsync(OrderFilter filter, DateTime? fromUtc, DateTime? toUtc, PageRequest page, CancellationToken ct = default);
     Task<PagedResult<OrderSummaryDto>> CheckInAsync(CheckInTab tab, OrderFilter filter, DateTime? fromUtc, DateTime? toUtc, PageRequest page, CancellationToken ct = default);
-    Task<PagedResult<OrderSummaryDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, DateTime? fromUtc, DateTime? toUtc, PageRequest page, CancellationToken ct = default);
+    /// <summary>One row per order and department with work at this stage.</summary>
+    Task<PagedResult<WorklistRowDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, DateTime? fromUtc, DateTime? toUtc, PageRequest page, CancellationToken ct = default);
     Task<ResultsKpiDto> ResultsKpiAsync(CancellationToken ct = default);
     Task<List<OrderSummaryDto>> ForPatientAsync(Guid patientId, CancellationToken ct = default);
     /// <summary>Orders matching a scanned or typed code: LSN, order number, HN or patient name.</summary>
     Task<(List<OrderSummaryDto> Orders, string? MatchedLsn)> SearchAsync(string text, int take, CancellationToken ct = default);
     Task<List<OrderFact>> FactsAsync(DateTime fromUtc, DateTime toUtc, Guid? referrerId, Guid? departmentId, CancellationToken ct = default);
     Task<List<ResultEvent>> HistoryAsync(Guid itemId, CancellationToken ct = default);
+    /// <summary>The patient's approved results for these tests from orders placed before <paramref name="before"/>, newest first.</summary>
+    Task<List<PreviousResultDto>> PreviousResultsAsync(Guid patientId, Guid exceptOrderId, IReadOnlyCollection<Guid> testIds, DateTime before, int take, CancellationToken ct = default);
     void Add(LabOrder order);
     /// <summary>A container added to an order that is already stored must be announced here too.</summary>
     void AddContainer(SpecimenContainer container);

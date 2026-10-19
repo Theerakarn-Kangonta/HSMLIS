@@ -192,30 +192,99 @@ public class LabOrderRepository(AppDbContext db) : ILabOrderRepository
         return await Page(query, ordered, page, ct);
     }
 
-    public async Task<PagedResult<OrderSummaryDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, DateTime? fromUtc, DateTime? toUtc, PageRequest page, CancellationToken ct = default)
+    public async Task<PagedResult<WorklistRowDto>> WorklistAsync(WorklistStage stage, OrderFilter filter, DateTime? fromUtc, DateTime? toUtc, PageRequest page, CancellationToken ct = default)
     {
-        var query = Stage(Filtered(filter with { Status = null }, fromUtc, toUtc), stage);
-        return await Page(query, query.OrderByDescending(o => o.Urgent).ThenBy(o => o.OrderedAt).ThenBy(o => o.Id), page, ct);
+        // The department filter narrows the rows (departments), not just the orders.
+        var openOrders = Filtered(filter with { Status = null, DepartmentId = null }, fromUtc, toUtc).Where(o => o.Status != OrderStatus.Cancelled);
+        var items = StageItems(db.OrderItems.AsNoTracking().Where(i => openOrders.Any(o => o.Id == i.LabOrderId)), stage);
+        if (filter.DepartmentId is { } department) items = items.Where(i => i.DepartmentId == department);
+        var keys = items.Select(i => new { i.LabOrderId, i.DepartmentId }).Distinct();
+
+        var total = await keys.CountAsync(ct);
+        // Urgent first, then oldest first; one order's departments stay together, in department-code order.
+        var pageKeys = await (
+                from k in keys
+                join o in db.LabOrders on k.LabOrderId equals o.Id
+                join d in db.Departments on k.DepartmentId equals d.Id
+                orderby o.Urgent descending, o.OrderedAt, o.Id, d.Code
+                select new { k.LabOrderId, k.DepartmentId })
+            .Skip(page.Skip)
+            .Take(page.PageSize)
+            .ToListAsync(ct);
+
+        var orderIds = pageKeys.Select(k => k.LabOrderId).Distinct().ToList();
+        var heads = await db.LabOrders.AsNoTracking()
+            .Where(o => orderIds.Contains(o.Id))
+            .Select(o => new
+            {
+                o.Id,
+                o.OrderNo,
+                o.PatientId,
+                o.Patient!.Hn,
+                PatientName = (o.Patient.Prefix ?? "") + o.Patient.FirstNameTh + " " + o.Patient.LastNameTh,
+                ReferrerName = o.Referrer != null ? o.Referrer.Name : null,
+                o.Status,
+                o.Urgent,
+                o.OrderedAt,
+                o.ReceivedAt,
+            })
+            .ToDictionaryAsync(o => o.Id, ct);
+        var counts = await db.OrderItems.AsNoTracking()
+            .Where(i => orderIds.Contains(i.LabOrderId) && i.ResultStatus != ResultStatus.Cancelled)
+            .GroupBy(i => new { i.LabOrderId, i.DepartmentId })
+            .Select(g => new
+            {
+                g.Key.LabOrderId,
+                g.Key.DepartmentId,
+                Items = g.Count(),
+                Entered = g.Count(i => i.ResultStatus != ResultStatus.Pending),
+                Verified = g.Count(i => i.ResultStatus == ResultStatus.Verified || i.ResultStatus == ResultStatus.Approved),
+                Approved = g.Count(i => i.ResultStatus == ResultStatus.Approved),
+                Critical = g.Count(i => i.Flag == ResultFlag.CriticalLow || i.Flag == ResultFlag.CriticalHigh),
+            })
+            .ToListAsync(ct);
+        var countsByKey = counts.ToDictionary(c => (c.LabOrderId, c.DepartmentId));
+        var departments = await db.Departments.AsNoTracking().ToDictionaryAsync(d => d.Id, ct);
+
+        var rows = pageKeys.Select(k =>
+        {
+            var o = heads[k.LabOrderId];
+            var dep = departments.GetValueOrDefault(k.DepartmentId);
+            var c = countsByKey.GetValueOrDefault((k.LabOrderId, k.DepartmentId));
+            return new WorklistRowDto(
+                o.Id, o.OrderNo, o.PatientId, o.Hn, o.PatientName, o.ReferrerName, o.Status, o.Urgent, o.OrderedAt, o.ReceivedAt,
+                k.DepartmentId, dep?.NameEn ?? "", dep?.Color ?? "#64748b",
+                c?.Items ?? 0, c?.Entered ?? 0, c?.Verified ?? 0, c?.Approved ?? 0, (c?.Critical ?? 0) > 0);
+        }).ToList();
+        return new PagedResult<WorklistRowDto>(rows, total, page.Page, page.PageSize);
     }
 
-    private static IQueryable<LabOrder> Stage(IQueryable<LabOrder> query, WorklistStage stage) => stage switch
+    /// <summary>The tests with work at a stage. "All" is every test whose specimen has reached the lab.</summary>
+    private IQueryable<OrderItem> StageItems(IQueryable<OrderItem> items, WorklistStage stage) => stage switch
     {
-        WorklistStage.Entry => query.Where(o => o.Status != OrderStatus.Cancelled
-            && o.Items.Any(i => i.ResultStatus == ResultStatus.Pending && o.Containers.Any(c => c.Id == i.ContainerId && c.Status == ContainerStatus.Received))),
-        WorklistStage.Verify => query.Where(o => o.Status != OrderStatus.Cancelled && o.Items.Any(i => i.ResultStatus == ResultStatus.Entered)),
-        WorklistStage.Approve => query.Where(o => o.Status != OrderStatus.Cancelled && o.Items.Any(i => i.ResultStatus == ResultStatus.Verified)),
-        WorklistStage.Critical => query.Where(o => o.Status != OrderStatus.Cancelled
-            && o.Items.Any(i => (i.Flag == ResultFlag.CriticalLow || i.Flag == ResultFlag.CriticalHigh) && i.ResultStatus != ResultStatus.Approved)),
-        _ => query.Where(o => o.Status == OrderStatus.InProgress || o.Status == OrderStatus.Completed),
+        WorklistStage.Entry => items.Where(i => i.ResultStatus == ResultStatus.Pending
+            && db.Containers.Any(c => c.Id == i.ContainerId && c.Status == ContainerStatus.Received)),
+        WorklistStage.Verify => items.Where(i => i.ResultStatus == ResultStatus.Entered),
+        WorklistStage.Approve => items.Where(i => i.ResultStatus == ResultStatus.Verified),
+        WorklistStage.Critical => items.Where(i => (i.Flag == ResultFlag.CriticalLow || i.Flag == ResultFlag.CriticalHigh)
+            && (i.ResultStatus == ResultStatus.Entered || i.ResultStatus == ResultStatus.Verified)),
+        _ => items.Where(i => i.ResultStatus != ResultStatus.Cancelled
+            && (i.ResultStatus != ResultStatus.Pending || db.Containers.Any(c => c.Id == i.ContainerId && c.Status == ContainerStatus.Received))),
     };
 
     public async Task<ResultsKpiDto> ResultsKpiAsync(CancellationToken ct = default)
     {
-        var all = db.LabOrders.AsQueryable();
+        // Counted like the worklist rows: one per order and department.
+        var open = db.LabOrders.Where(o => o.Status != OrderStatus.Cancelled);
+        Task<int> Rows(WorklistStage stage) =>
+            StageItems(db.OrderItems.Where(i => open.Any(o => o.Id == i.LabOrderId)), stage)
+                .Select(i => new { i.LabOrderId, i.DepartmentId })
+                .Distinct()
+                .CountAsync(ct);
         return new ResultsKpiDto(
-            await Stage(all, WorklistStage.Entry).CountAsync(ct),
-            await Stage(all, WorklistStage.Verify).CountAsync(ct),
-            await Stage(all, WorklistStage.Approve).CountAsync(ct),
+            await Rows(WorklistStage.Entry),
+            await Rows(WorklistStage.Verify),
+            await Rows(WorklistStage.Approve),
             await db.OrderItems.CountAsync(i => (i.Flag == ResultFlag.CriticalLow || i.Flag == ResultFlag.CriticalHigh)
                 && (i.ResultStatus == ResultStatus.Entered || i.ResultStatus == ResultStatus.Verified), ct));
     }
@@ -268,6 +337,16 @@ public class LabOrderRepository(AppDbContext db) : ILabOrderRepository
 
     public Task<List<ResultEvent>> HistoryAsync(Guid itemId, CancellationToken ct = default) =>
         db.ResultEvents.AsNoTracking().Where(e => e.OrderItemId == itemId).OrderByDescending(e => e.At).Take(100).ToListAsync(ct);
+
+    public Task<List<PreviousResultDto>> PreviousResultsAsync(Guid patientId, Guid exceptOrderId, IReadOnlyCollection<Guid> testIds, DateTime before, int take, CancellationToken ct = default) =>
+        (from i in db.OrderItems.AsNoTracking()
+         join o in db.LabOrders on i.LabOrderId equals o.Id
+         where o.PatientId == patientId && o.Id != exceptOrderId && o.OrderedAt < before
+             && testIds.Contains(i.LabTestId) && i.ResultStatus == ResultStatus.Approved && i.Value != null
+         orderby i.ApprovedAt descending
+         select new PreviousResultDto(i.LabTestId, o.Id, o.OrderNo, i.Value!, i.Flag, i.Unit, i.RefText, i.ApprovedAt ?? o.OrderedAt))
+        .Take(take)
+        .ToListAsync(ct);
 
     public void Add(LabOrder order) => db.LabOrders.Add(order);
 

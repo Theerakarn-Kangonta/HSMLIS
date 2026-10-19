@@ -42,6 +42,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenService, JwtTokenService>();
+        services.Configure<QzOptions>(configuration.GetSection(QzOptions.Section));
+        services.AddSingleton<IQzSigner, QzSigner>();
         services.AddScoped<DatabaseSeeder>();
         return services;
     }

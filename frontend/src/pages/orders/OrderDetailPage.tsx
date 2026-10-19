@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, CircleCheck, ClipboardPen, CreditCard, FileText, FlaskConical, Printer, RotateCcw, TestTube, XCircle } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ContainerStatusBadge, FlagBadge, OrderStatusBadge, ResultStatusBadge, UrgentBadge } from '../../components/lab'
 import { CollectDialog, ReceiveDialog, RejectDialog } from '../../components/SpecimenDialogs'
 import {
@@ -25,7 +25,7 @@ import {
   thClass,
   useToast,
 } from '../../components/ui'
-import { api, type OrderDetail } from '../../lib/api'
+import { api, type OrderDetail, type OrderItem } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useI18n } from '../../lib/i18n'
 
@@ -39,6 +39,8 @@ export function OrderDetailPage() {
   const { can } = useAuth()
   const query = useOrder(id)
   const [dialog, setDialog] = useState<'collect' | 'receive' | 'reject' | 'cancel' | null>(null)
+  const [cancelItem, setCancelItem] = useState<OrderItem | null>(null)
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
   const recollect = useMutation({
@@ -66,6 +68,9 @@ export function OrderDetailPage() {
   const hasReceived = o.containers.some((c) => c.status === 'Received')
   const anyApproved = o.items.some((i) => i.resultStatus === 'Approved')
   const resultsUser = can('results.enter') || can('results.verify') || can('results.approve')
+  const activeItems = o.items.filter((i) => i.resultStatus !== 'Cancelled').length
+  // One test can go while others remain; an approved result must be reopened first.
+  const cancellable = (i: OrderItem) => open && activeItems > 1 && i.resultStatus !== 'Approved' && i.resultStatus !== 'Cancelled'
 
   const timeline = [
     { label: t('timeline.ordered'), at: o.orderedAt, done: true },
@@ -240,20 +245,27 @@ export function OrderDetailPage() {
                   <th className={thClass}>{t('result.value')}</th>
                   <th className={thClass}>{t('result.status')}</th>
                   <th className={`${thClass} text-right`}>{t('test.price')}</th>
+                  <th className={thClass} />
                 </tr>
               </thead>
               <tbody className={tableBodyClass}>
                 {o.items.map((i) => (
-                  <tr key={i.id}>
+                  <tr key={i.id} className={i.resultStatus === 'Cancelled' ? 'text-ink-muted' : undefined}>
                     <td className={`${tdClass} font-mono`} data-title>
                       {i.testCode}
                     </td>
                     <td className={tdClass} data-label={t('test.name')}>
-                      {i.testNameEn}
+                      <span className={i.resultStatus === 'Cancelled' ? 'line-through' : undefined}>{i.testNameEn}</span>
                       {i.packageCode ? (
                         <Badge tone="accent" className="ml-2">
                           {t('order.package')} {i.packageCode}
                         </Badge>
+                      ) : null}
+                      {i.cancelledAt ? (
+                        <span className="mt-1 block text-xs text-red-700">
+                          {t('order.testCancelledBy', { at: formatDateTime(i.cancelledAt), by: i.cancelledByName ?? '' })}
+                          {i.cancelReason ? `: ${i.cancelReason}` : ''}
+                        </span>
                       ) : null}
                     </td>
                     <td className={tdClass} data-label={t('test.department')}>
@@ -277,7 +289,15 @@ export function OrderDetailPage() {
                       <ResultStatusBadge status={i.resultStatus} />
                     </td>
                     <td className={`${tdClass} text-right`} data-label={t('test.price')}>
-                      {formatMoney(i.price)}
+                      <span className={i.resultStatus === 'Cancelled' ? 'line-through' : undefined}>{formatMoney(i.price)}</span>
+                    </td>
+                    <td className={`${tdClass} text-right`} data-actions>
+                      {cancellable(i) ? (
+                        <Button size="sm" variant="dangerOutline" onClick={() => setCancelItem(i)}>
+                          <Ban className="size-4" />
+                          {t('order.cancelTest')}
+                        </Button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -364,9 +384,17 @@ export function OrderDetailPage() {
       </div>
 
       {dialog === 'collect' ? <CollectDialog order={o} onClose={() => setDialog(null)} /> : null}
-      {dialog === 'receive' ? <ReceiveDialog order={o} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'receive' ? (
+        <ReceiveDialog
+          order={o}
+          onClose={() => setDialog(null)}
+          // Everything is in the lab: go straight to this order's results, one row per department.
+          onAllReceived={resultsUser ? (r) => navigate(`/lab-results?search=${encodeURIComponent(r.orderNo)}`) : undefined}
+        />
+      ) : null}
       {dialog === 'reject' ? <RejectDialog order={o} onClose={() => setDialog(null)} /> : null}
       {dialog === 'cancel' ? <CancelDialog order={o} onClose={() => setDialog(null)} /> : null}
+      {cancelItem ? <CancelTestDialog order={o} item={cancelItem} onClose={() => setCancelItem(null)} /> : null}
     </div>
   )
 }
@@ -398,6 +426,41 @@ function CancelDialog({ order, onClose }: { order: OrderDetail; onClose: () => v
         </Field>
         <ErrorNote error={cancel.error} />
         <DialogActions onClose={onClose} pending={cancel.isPending} submitLabel={t('order.cancel')} variant="danger" />
+      </form>
+    </Modal>
+  )
+}
+
+function CancelTestDialog({ order, item, onClose }: { order: OrderDetail; item: OrderItem; onClose: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const queryClient = useQueryClient()
+  const [reason, setReason] = useState('')
+  const cancel = useMutation({
+    mutationFn: () => api.cancelItem(order.id, item.id, reason),
+    onSuccess: (o) => {
+      queryClient.setQueryData(['order', o.id], o)
+      queryClient.invalidateQueries({ queryKey: ['orders'] })
+      queryClient.invalidateQueries({ queryKey: ['worklist'] })
+      queryClient.invalidateQueries({ queryKey: ['results-kpi'] })
+      toast(t('order.testCancelledToast'))
+      onClose()
+    },
+  })
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    cancel.mutate()
+  }
+  return (
+    <Modal title={t('order.cancelTestTitle', { code: item.testCode })} description={`${item.testNameEn} · ${order.orderNo}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-ink-muted">{t('order.cancelTestHint')}</p>
+        {item.packageCode ? <p className="text-sm text-ink-muted">{t('order.cancelTestPackage', { code: item.packageCode })}</p> : null}
+        <Field label={t('order.cancelReason')}>
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} required maxLength={300} autoFocus />
+        </Field>
+        <ErrorNote error={cancel.error} />
+        <DialogActions onClose={onClose} pending={cancel.isPending} submitLabel={t('order.cancelTest')} variant="danger" />
       </form>
     </Modal>
   )

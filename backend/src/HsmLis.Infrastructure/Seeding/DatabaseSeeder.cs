@@ -37,7 +37,6 @@ public class DatabaseSeeder(AppDbContext db, IPasswordHasher hasher, TimeProvide
         Code = "LAB01",
         NameTh = name.Trim(),
         TimeZone = "Asia/Bangkok",
-        OrderPrefix = "CENTER",
         AutoLogoutMinutes = 20,
         CreatedAt = now,
     };
