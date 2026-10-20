@@ -411,6 +411,9 @@ export class ApiError extends Error {
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
+/** The live-update connection (see lib/live.ts). */
+export const liveUrl = `${BASE}/api/live`
+
 let onUnauthorized: () => void = () => {}
 /** Called when a request outside sign-in comes back 401, i.e. the session ended. */
 export function setUnauthorizedHandler(handler: () => void) {

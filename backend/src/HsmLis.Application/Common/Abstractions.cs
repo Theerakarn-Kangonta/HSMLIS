@@ -59,6 +59,31 @@ public interface IQzSigner
     string Sign(string data);
 }
 
+/// <summary>
+/// What a save changed, sent to the organization's open browsers so their screens reload that data.
+/// It names areas and order ids only, never the data itself: each browser fetches what it may see through the API.
+/// </summary>
+/// <param name="OrderIds">The orders that changed, or null when there were too many to list.</param>
+public record ChangeNotice(IReadOnlyList<string> Topics, IReadOnlyList<Guid>? OrderIds);
+
+/// <summary>The areas a <see cref="ChangeNotice"/> can name. The frontend maps each to the lists it shows.</summary>
+public static class ChangeTopics
+{
+    public const string Patients = "patients";
+    public const string Orders = "orders";
+    public const string Billing = "billing";
+    public const string Catalog = "catalog";
+    public const string Users = "users";
+    public const string Organization = "organization";
+    public const string Audit = "audit";
+}
+
+/// <summary>Tells the signed-in users of one organization that something changed.</summary>
+public interface IChangeFeed
+{
+    Task PublishAsync(Guid organizationId, ChangeNotice notice);
+}
+
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);
 
 /// <summary>Which page of a list a caller asked for, held to sensible bounds.</summary>

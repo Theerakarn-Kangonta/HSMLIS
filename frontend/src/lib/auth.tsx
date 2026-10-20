@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import { api, ApiError, setUnauthorizedHandler, type Me, type Permission } from './api'
+import { useLiveUpdates } from './live'
 
 type Auth = {
   me: Me | null
@@ -44,6 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.logout().catch(() => {})
     forget()
   }, [forget])
+
+  // Keeps every screen current while signed in; reconnects as someone else after a new sign-in.
+  useLiveUpdates(meQuery.data?.user.id)
 
   const signIn = useCallback((me: Me) => queryClient.setQueryData<Me | null>(['me'], me), [queryClient])
 

@@ -65,6 +65,9 @@ frontend/
 - **Cancelling:** a whole order, or one test with a reason (not an approved one, not the last one). A cancelled test
   comes off the bill; a package test at its share of the package price (`OrderRules.PackageShares`).
 - **Concurrency:** orders and invoices carry a version; a stale screen gets "changed meanwhile" instead of overwriting.
+- **Live updates:** every signed-in browser keeps a SignalR connection (`/api/live`). After each save the API tells
+  the users of that organization what changed (areas and order ids, never data), and their open screens reload it
+  through the normal API, so nobody has to refresh. Notices are sent only after the transaction commits.
 - **Audit:** every change is logged; the database refuses UPDATE/DELETE/TRUNCATE on `audit_logs` and `result_events`.
 - **Sessions:** JWT in an HttpOnly cookie, re-checked each request; password change signs out other sessions;
   5 wrong passwords lock the account for 15 minutes; the screen signs out after the organization's idle time (default 20 min).
@@ -225,6 +228,7 @@ again on each PC.
 | QZ Tray asks "Allow / Block" once | Tick "Remember this decision" and press Allow. If it says "Untrusted website", that PC lacks the certificate or it differs from `Qz__Certificate`: run `setup-printing.bat` again. |
 | The browser asks to allow access to the local network | Press Allow, or add the site's address to `SITES` in `setup-printing.bat` and run it again. |
 | Label page says silent printing is not set up on the server | `Qz__Certificate` / `Qz__PrivateKey` missing or not valid PEM on Render. |
+| Screens don't update by themselves until you switch tabs | The live connection is failing: check the browser console for `/api/live`. It must come from an address in `Cors__AllowedOrigins__*`. The 30–60 s polling on the worklist and check-in screens still works. |
 | Labels print upside down, or one label spans two | Change `DIRECTION` or `LABEL.gap` in `frontend/src/lib/specimenLabel.ts`. |
 
 ## Not built yet (from the NDC LIMS spec)

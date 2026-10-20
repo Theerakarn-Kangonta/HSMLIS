@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     // In development the API runs in Docker on :8080; proxying keeps requests same-origin.
-    proxy: { '/api': 'http://localhost:8080' },
+    // ws: the live-update connection (/api/live) is a WebSocket.
+    proxy: { '/api': { target: 'http://localhost:8080', ws: true } },
   },
 })

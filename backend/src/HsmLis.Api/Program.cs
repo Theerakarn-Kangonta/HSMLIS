@@ -41,6 +41,9 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
+// Live updates (see LiveHub). Browsers never send the hub anything but SignalR's own small control messages.
+builder.Services.AddSignalR(o => o.MaximumReceiveMessageSize = 4 * 1024);
+builder.Services.AddSingleton<IChangeFeed, HubChangeFeed>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AppExceptionHandler>();
 
@@ -196,17 +199,22 @@ if (app.Environment.IsDevelopment()) app.MapOpenApi().AllowAnonymous();
 app.UseCors();
 // The browser sends the session cookie on its own, so a request that changes anything must
 // prove it came from our web app: a header other sites cannot add, and no foreign Origin.
+// The live-update connection is a GET that cannot carry the header (browsers do not let script
+// set headers on a WebSocket), so it must come from a known Origin instead.
 app.Use(async (http, next) =>
 {
     var request = http.Request;
-    if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method) && !HttpMethods.IsOptions(request.Method))
+    var changesData = !HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method) && !HttpMethods.IsOptions(request.Method);
+    var live = request.Path.StartsWithSegments(LiveHub.Path);
+    if (changesData || live)
     {
         var origin = request.Headers.Origin.ToString();
         var knownOrigin = origin.Length == 0
             || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)
             || (Uri.TryCreate(origin, UriKind.Absolute, out var uri)
                 && string.Equals(uri.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase));
-        if (!knownOrigin || request.Headers[SessionCookie.RequestHeader] != SessionCookie.RequestHeaderValue)
+        var hasHeader = request.Headers[SessionCookie.RequestHeader] == SessionCookie.RequestHeaderValue;
+        if (!knownOrigin || (changesData && !hasHeader))
         {
             await Results.Problem(
                 statusCode: StatusCodes.Status403Forbidden,
@@ -224,6 +232,8 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapControllers();
+// Closes a live connection when its session expires, so it never outlives the sign-in.
+app.MapHub<LiveHub>(LiveHub.Path, o => o.CloseOnAuthenticationExpiration = true);
 
 app.Run();
 

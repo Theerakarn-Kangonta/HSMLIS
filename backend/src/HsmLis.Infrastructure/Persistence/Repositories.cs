@@ -3,22 +3,141 @@ using HsmLis.Application.Dtos;
 using HsmLis.Application.Repositories;
 using HsmLis.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace HsmLis.Infrastructure.Persistence;
 
-public class UnitOfWork(AppDbContext db) : IUnitOfWork
+/// <summary>
+/// Saves, then tells the organization's open browsers what changed (see <see cref="ChangeSet"/>).
+/// Inside a transaction the notice waits for the commit, so no screen reloads data that could still roll back.
+/// </summary>
+public class UnitOfWork(AppDbContext db, ICurrentUser currentUser, IChangeFeed feed, ILogger<UnitOfWork> logger) : IUnitOfWork
 {
-    public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
+    private ChangeSet? _pending;
+
+    public async Task SaveChangesAsync(CancellationToken ct = default)
+    {
+        var changes = ChangeSet.From(db.ChangeTracker);
+        await db.SaveChangesAsync(ct);
+        if (db.Database.CurrentTransaction is null) await PublishAsync(changes);
+        else (_pending ??= new ChangeSet()).Add(changes);
+    }
 
     public async Task<T> InTransactionAsync<T>(Func<Task<T>> work, CancellationToken ct = default)
     {
         if (db.Database.CurrentTransaction is not null) return await work();
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var result = await work();
-        await transaction.CommitAsync(ct);
+        _pending = null;
+        T result;
+        await using (var transaction = await db.Database.BeginTransactionAsync(ct))
+        {
+            try
+            {
+                result = await work();
+                await transaction.CommitAsync(ct);
+            }
+            catch
+            {
+                _pending = null;
+                throw;
+            }
+        }
+
+        var committed = _pending;
+        _pending = null;
+        if (committed is not null) await PublishAsync(committed);
         return result;
+    }
+
+    private async Task PublishAsync(ChangeSet changes)
+    {
+        // Anonymous writes (sign-in, start-up seeding) concern no open screen.
+        var orgId = currentUser.OrganizationId;
+        if (orgId == Guid.Empty || changes.IsEmpty) return;
+        try
+        {
+            await feed.PublishAsync(orgId, changes.ToNotice());
+        }
+        catch (Exception ex)
+        {
+            // The data is saved; a missed notice only means screens refresh on their next poll or focus.
+            logger.LogWarning(ex, "Could not send the change notice.");
+        }
+    }
+}
+
+/// <summary>The areas and orders a save touched, read from EF's change tracker before saving.</summary>
+public class ChangeSet
+{
+    /// <summary>Beyond this many orders the notice says "orders changed" without listing them.</summary>
+    public const int MaxOrderIds = 50;
+
+    private readonly HashSet<string> _topics = [];
+    private readonly HashSet<Guid> _orderIds = [];
+
+    public bool IsEmpty => _topics.Count == 0;
+
+    public static ChangeSet From(ChangeTracker tracker)
+    {
+        var set = new ChangeSet();
+        foreach (var entry in tracker.Entries())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
+            switch (entry.Entity)
+            {
+                case Patient:
+                    set._topics.Add(ChangeTopics.Patients);
+                    break;
+                case LabOrder order:
+                    set.AddOrder(order.Id);
+                    break;
+                case OrderItem item:
+                    set.AddOrder(item.LabOrderId);
+                    break;
+                case SpecimenContainer container:
+                    set.AddOrder(container.LabOrderId);
+                    break;
+                case Invoice invoice:
+                    set._topics.Add(ChangeTopics.Billing);
+                    // The order screen shows its invoice.
+                    set._orderIds.Add(invoice.LabOrderId);
+                    break;
+                case Payment:
+                    set._topics.Add(ChangeTopics.Billing);
+                    break;
+                case Branch or Department or SpecimenType or LabTest or TestPackage or ReferringOrganization:
+                    set._topics.Add(ChangeTopics.Catalog);
+                    break;
+                case User:
+                    set._topics.Add(ChangeTopics.Users);
+                    break;
+                case Organization:
+                    set._topics.Add(ChangeTopics.Organization);
+                    break;
+                case AuditLog:
+                    set._topics.Add(ChangeTopics.Audit);
+                    break;
+            }
+        }
+        return set;
+    }
+
+    public void Add(ChangeSet other)
+    {
+        _topics.UnionWith(other._topics);
+        _orderIds.UnionWith(other._orderIds);
+    }
+
+    public ChangeNotice ToNotice() => new(
+        [.. _topics.Order()],
+        _orderIds.Count > MaxOrderIds ? null : [.. _orderIds]);
+
+    private void AddOrder(Guid id)
+    {
+        _topics.Add(ChangeTopics.Orders);
+        _orderIds.Add(id);
     }
 }
 

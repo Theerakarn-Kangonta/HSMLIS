@@ -41,6 +41,9 @@ The initial migration adds append-only triggers on `audit_logs` and `result_even
 - `OrgContext` (via `IOrgContextProvider`) holds the organization, the user and "now" for a request; use it for
   local dates (`ctx.Today`, `ctx.Bounds`) and for name snapshots on records.
 - Orders change through `OrderState.Refresh`, which re-derives the status and bumps `Version` (concurrency token).
+- **Live updates:** `UnitOfWork` reads the change tracker on each save and, after commit, sends a `ChangeNotice`
+  (topics + order ids) to the organization's SignalR group (`Api/Infrastructure/LiveUpdates.cs`). The frontend maps
+  topics to query keys in `src/lib/live.ts`; a new entity or query key needs an entry on both sides.
 - Result rules (flags, reference ranges) live in `Domain/ResultRules.cs` and are mirrored in `frontend/src/lib/results.ts`;
   change both together.
 

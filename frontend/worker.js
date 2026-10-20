@@ -12,6 +12,7 @@ export default {
     // shared key that proves this header came from us and was not typed in by the visitor.
     proxied.headers.set('X-HSMLIS-Proxy-Key', env.PROXY_KEY)
     proxied.headers.set('X-HSMLIS-Client-IP', request.headers.get('CF-Connecting-IP') ?? '')
+    // Also carries the live-update WebSocket (/api/live): Cloudflare passes the upgrade through.
     return fetch(proxied, { redirect: 'manual' })
   },
 }

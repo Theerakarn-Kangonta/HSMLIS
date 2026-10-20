@@ -9,8 +9,11 @@ using HsmLis.Application.Common;
 using HsmLis.Application.Dtos;
 using HsmLis.Domain.Entities;
 using HsmLis.Infrastructure.Persistence;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -242,6 +245,106 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Empty(list.Items);
         var update = await b.PutAsJsonAsync($"/api/patients/{patient.Id}", NewPatient("ขโมย"), Json);
         Assert.Equal(HttpStatusCode.NotFound, update.StatusCode);
+    }
+
+    // ---------- live updates ----------
+
+    /// <summary>Opens the live-update connection a signed-in browser keeps, collecting what it is told.</summary>
+    private async Task<HubConnection> ConnectLiveAsync(Lab lab, UserRole role, Channel<ChangeNotice> received)
+    {
+        var login = await factory.NewClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(lab.Usernames[role], Password));
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var cookie = login.Headers.GetValues("Set-Cookie").First().Split(';')[0];
+        var connection = LiveConnection(cookie);
+        connection.On<ChangeNotice>("changed", notice => received.Writer.TryWrite(notice));
+        await connection.StartAsync();
+        return connection;
+    }
+
+    private HubConnection LiveConnection(string? cookie) => new HubConnectionBuilder()
+        .WithUrl(new Uri(factory.Server.BaseAddress, "/api/live"), o =>
+        {
+            // The in-memory test server has no WebSockets; the hub behaves the same over long polling.
+            o.Transports = HttpTransportType.LongPolling;
+            o.HttpMessageHandlerFactory = _ => new AppHeaderHandler { InnerHandler = factory.Server.CreateHandler() };
+            if (cookie is not null) o.Headers["Cookie"] = cookie;
+        })
+        .Build();
+
+    /// <summary>The SignalR client sends its own X-Requested-With; replace it with the app's, as the browser client does.</summary>
+    private sealed class AppHeaderHandler : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            request.Headers.Remove("X-Requested-With");
+            request.Headers.Add("X-Requested-With", "HSMLIS");
+            return base.SendAsync(request, ct);
+        }
+    }
+
+    private static async Task<ChangeNotice> NextNoticeWith(Channel<ChangeNotice> received, string topic)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            var notice = await received.Reader.ReadAsync(timeout.Token);
+            if (notice.Topics.Contains(topic)) return notice;
+        }
+    }
+
+    [Fact]
+    public async Task Live_updates_reach_only_the_same_organization()
+    {
+        var a = await NewLabAsync();
+        var b = await NewLabAsync();
+        var received = Channel.CreateUnbounded<ChangeNotice>();
+        await using var live = await ConnectLiveAsync(a, UserRole.Cashier, received);
+
+        // Lab B changes its catalog, then lab A registers a patient.
+        var adminB = await SignInAsync(b, UserRole.SuperAdmin);
+        await Post<DepartmentDto>(adminB, "/api/departments", new DepartmentRequest("901", "Other lab", "อื่น", "#3b82f6", null, true));
+        var receptionA = await SignInAsync(a, UserRole.Receptionist);
+        await Post<PatientDto>(receptionA, "/api/patients", NewPatient("สด"));
+
+        await NextNoticeWith(received, ChangeTopics.Patients);
+        await Task.Delay(300);
+        received.Writer.Complete();
+        await foreach (var notice in received.Reader.ReadAllAsync())
+            Assert.DoesNotContain(ChangeTopics.Catalog, notice.Topics);
+    }
+
+    [Fact]
+    public async Task Live_updates_name_the_changed_order_after_its_transaction_commits()
+    {
+        var lab = await NewLabAsync();
+        var admin = await SignInAsync(lab, UserRole.SuperAdmin);
+        var (glucose, _) = await CatalogAsync(admin);
+        var patient = await Post<PatientDto>(admin, "/api/patients", NewPatient("ออเดอร์"));
+        var received = Channel.CreateUnbounded<ChangeNotice>();
+        await using var live = await ConnectLiveAsync(lab, UserRole.LabTechnician, received);
+
+        var order = await Post<OrderDetailDto>(admin, "/api/orders", new CreateOrderRequest(
+            patient.Id, null, null, null, false, null, null, null, null, null, null, null, null, null, [glucose.Id], 0));
+
+        var notice = await NextNoticeWith(received, ChangeTopics.Orders);
+        Assert.Contains(order.Id, notice.OrderIds!);
+    }
+
+    [Fact]
+    public async Task Live_updates_need_a_session_and_our_own_site()
+    {
+        var anonymous = LiveConnection(cookie: null);
+        var refused = await Assert.ThrowsAsync<HttpRequestException>(() => anonymous.StartAsync());
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+
+        // Another website opening the connection with a signed-in user's cookie.
+        var lab = await NewLabAsync();
+        var client = await SignInAsync(lab, UserRole.Cashier);
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/live?id=x");
+        request.Headers.Add("Origin", "https://evil.example");
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("cross_site_request", await ErrorCode(response));
     }
 
     // ---------- the whole lab workflow ----------
