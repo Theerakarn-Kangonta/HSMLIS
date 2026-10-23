@@ -71,7 +71,7 @@ export function LabTestsPage() {
         const setRange = (index: number, patch: Partial<ReferenceRange>) => set({ referenceRanges: v.referenceRanges.map((r, i) => (i === index ? { ...r, ...patch } : r)) })
         const takesOptions = v.resultType !== 'Numeric' && v.resultType !== 'Text'
         return (
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label={t('common.code')}>
                 <Input value={v.code} onChange={(e) => set({ code: e.target.value })} required maxLength={30} />

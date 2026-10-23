@@ -167,18 +167,18 @@ export function NewOrderPage() {
           </Button>
         ) : null}
       </PageHeader>
-      <div className="grid items-start gap-5 xl:grid-cols-[1fr_22rem]">
-        <div className="space-y-5">
+      <div className="grid items-start gap-4 xl:grid-cols-[1fr_22rem]">
+        <div className="space-y-4">
           <Card>
             <CardHeader title={`1. ${t('order.stepPatient')}`} />
-            <div className="p-5">
+            <div className="p-4">
               <PatientPicker value={patient} onChange={setPatient} registerHref="/patients/new?then=order" />
             </div>
           </Card>
 
           <Card>
             <CardHeader title={`2. ${t('order.stepVisit')}`} />
-            <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
               <Field label={t('order.referrer')} className="sm:col-span-2">
                 <Select value={visit.referrerId} onChange={(e) => setV({ referrerId: e.target.value })}>
                   <option value="">{t('order.noReferrer')}</option>
@@ -236,7 +236,7 @@ export function NewOrderPage() {
               </button>
             </CardHeader>
             {packagesOpen ? (
-              <div className="space-y-3 p-5">
+              <div className="space-y-3 p-4">
                 <SearchInput value={packageSearch} onChange={setPackageSearch} placeholder={t('order.searchPackages')} className="max-w-sm" />
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {visiblePackages.map((p) => {
@@ -267,7 +267,7 @@ export function NewOrderPage() {
 
           <Card>
             <CardHeader title={`4. ${t('order.stepTests')}`} />
-            <div className="space-y-3 p-5">
+            <div className="space-y-3 p-4">
               <SearchInput value={testSearch} onChange={setTestSearch} placeholder={t('order.searchTests')} className="max-w-sm" />
               <div className="flex flex-wrap gap-1.5">
                 <DeptChip active={!department} onClick={() => setDepartment('')} label={t('common.all')} count={activeTests.length} />
@@ -315,7 +315,7 @@ export function NewOrderPage() {
         <Card className="xl:flex xl:min-h-0 xl:flex-col">
           <CardHeader title={t('order.summary', { n: itemCount })} />
           {/* On wide screens the items and inputs scroll inside the card so the totals and Confirm stay visible. */}
-          <div className="space-y-4 p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+          <div className="space-y-4 p-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
             {chosenPackages.length === 0 && standalone.length === 0 ? <p className="text-sm text-ink-muted">{t('order.nothingChosen')}</p> : null}
             <ul className="space-y-2">
               {chosenPackages.map((p) => (
@@ -363,7 +363,7 @@ export function NewOrderPage() {
               </Field>
             </div>
           </div>
-          <div className="space-y-4 border-t border-rule p-5 xl:shrink-0">
+          <div className="space-y-4 border-t border-rule p-4 xl:shrink-0">
             <dl className="space-y-1 text-sm">
               <div className="flex justify-between text-ink-muted">
                 <dt>{t('order.subtotal')}</dt>

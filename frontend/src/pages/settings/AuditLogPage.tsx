@@ -23,7 +23,7 @@ export function AuditLogPage() {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('audit.title')} description={t('audit.subtitle')} />
       <Card>
         <Toolbar>

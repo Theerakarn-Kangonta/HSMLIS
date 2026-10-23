@@ -28,9 +28,9 @@ export function SearchPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('search.title')} description={t('search.subtitle')} />
-      <Card className="p-5">
+      <Card className="p-4">
         <form onSubmit={submit} className="flex flex-wrap gap-3">
           <SearchInput value={text} onChange={setText} large autoFocus placeholder={t('search.placeholder')} className="min-w-64 flex-1" aria-label={t('search.placeholder')} />
           <Button type="submit" size="lg">

@@ -3,7 +3,8 @@ import { CircleCheck, Printer, TestTubes, XCircle } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FilterBar, filterQuery, filtersFromParams, type Filters } from '../../components/FilterBar'
-import { OrderStatusBadge, UrgentBadge } from '../../components/lab'
+import { JourneyTrack } from '../../components/JourneyTrack'
+import { UrgentBadge } from '../../components/lab'
 import { CollectDialog, ReceiveDialog, RejectDialog } from '../../components/SpecimenDialogs'
 import {
   Badge,
@@ -116,12 +117,9 @@ export function CheckInPage() {
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('checkin.title')} description={t('checkin.subtitle')} />
       <Tabs value={tab} onChange={setTab} tabs={TABS.map((x) => ({ value: x, label: t(`checkin.tab.${x}`), count: counts.data?.[x] }))} />
-      <Card className="px-5 py-4">
-        <FilterBar value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
-      </Card>
       <Card>
         <Toolbar
           actions={
@@ -138,7 +136,8 @@ export function CheckInPage() {
             ) : null
           }
         >
-          <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={t('checkin.searchPlaceholder')} className="w-full max-w-md" />
+          <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={t('checkin.searchPlaceholder')} className="w-full sm:w-72" />
+          <FilterBar compact value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
         </Toolbar>
         <ErrorNote error={list.error ?? bulk.error} />
         {list.data && list.data.total === 0 ? (
@@ -189,7 +188,7 @@ export function CheckInPage() {
                     ) : null}
                   </td>
                   <td className={tdClass} data-label={t('patient.name')}>
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 whitespace-nowrap">
                       <PatientPhoto patientId={o.patientId} photoAt={o.patientPhotoAt} name={o.patientName} />
                       {o.patientName}
                     </span>
@@ -210,7 +209,7 @@ export function CheckInPage() {
                     ) : null}
                   </td>
                   <td className={tdClass} data-label={t('order.status')}>
-                    <OrderStatusBadge status={o.status} />
+                    <JourneyTrack order={o} />
                   </td>
                   <td className={`${tdClass} whitespace-nowrap text-ink-muted`} data-label={t('order.orderedAt')}>
                     {formatDateTime(o.orderedAt)}

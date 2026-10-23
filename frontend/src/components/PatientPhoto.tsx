@@ -6,6 +6,7 @@ import { focusRing, Modal } from './ui'
 
 const sizes = {
   sm: 'size-8 rounded-full',
+  band: 'size-11 rounded-full',
   md: 'h-16 w-12 rounded-md',
   lg: 'h-32 w-24 rounded-lg',
 }
@@ -21,7 +22,7 @@ export function PatientPhoto({ patientId, photoAt, name, size = 'sm', zoom = tru
   if (!photoAt)
     return (
       <span className={`${box} grid place-items-center text-ink-muted`} title={t('patient.noPhoto')}>
-        <UserRound className={size === 'sm' ? 'size-4' : 'size-1/2'} aria-hidden />
+        <UserRound className="size-1/2" aria-hidden />
       </span>
     )
   const src = api.patientPhotoUrl(patientId, photoAt)

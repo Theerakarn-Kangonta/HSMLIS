@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, CircleCheck, ClipboardPen, CreditCard, FileText, FlaskConical, Printer, RotateCcw, TestTube, XCircle } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ContainerStatusBadge, FlagBadge, OrderStatusBadge, ResultStatusBadge, UrgentBadge } from '../../components/lab'
+import { ContainerStatusBadge, FlagBadge, OrderStatusBadge, ResultStatusBadge, UrgentBadge, isCritical } from '../../components/lab'
+import { PatientBand } from '../../components/PatientBand'
 import { PatientPhoto } from '../../components/PatientPhoto'
 import { CollectDialog, ReceiveDialog, RejectDialog } from '../../components/SpecimenDialogs'
 import {
@@ -81,7 +82,7 @@ export function OrderDetailPage() {
   ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-2">
@@ -92,13 +93,14 @@ export function OrderDetailPage() {
         description={t('order.detailSubtitle')}
         back="/lab-orders"
       />
+      <PatientBand patient={o.patient} critical={o.items.some((i) => isCritical(i.flag))} urgent={o.urgent} />
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_20rem]">
-        <div className="space-y-5">
-          <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader title={t('order.info')} icon={ClipboardPen} />
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 p-5 text-sm">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 p-4 text-sm">
                 <dt className="text-ink-muted">{t('order.no')}</dt>
                 <dd className="font-mono font-medium text-ink">{o.orderNo}</dd>
                 <dt className="text-ink-muted">{t('order.status')}</dt>
@@ -151,7 +153,7 @@ export function OrderDetailPage() {
                   {t('order.viewPatient')}
                 </Link>
               </CardHeader>
-              <div className="flex gap-5 p-5">
+              <div className="flex gap-4 p-4">
                 <PatientPhoto patientId={o.patient.id} photoAt={o.patient.photoAt} name={o.patient.fullName} size="lg" />
                 <dl className="grid flex-1 grid-cols-[auto_1fr] content-start gap-x-4 gap-y-2 text-sm">
                   <dt className="text-ink-muted">HN</dt>
@@ -310,12 +312,12 @@ export function OrderDetailPage() {
           </Card>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           <Card>
             <CardHeader title={t('order.progressTitle')} />
-            <ol className="space-y-0 p-5">
+            <ol className="space-y-0 p-4">
               {timeline.map((step, index) => (
-                <li key={step.label} className="relative flex gap-3 pb-5 last:pb-0">
+                <li key={step.label} className="relative flex gap-3 pb-4 last:pb-0">
                   {index < timeline.length - 1 ? <span className={`absolute left-[0.6875rem] top-6 h-[calc(100%-1rem)] w-0.5 ${step.done && timeline[index + 1].done ? 'bg-emerald-500' : 'bg-slate-200'}`} aria-hidden /> : null}
                   <span className={`flex size-6 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-emerald-500 text-white' : 'border-2 border-slate-300 bg-surface'}`}>
                     {step.done ? <CircleCheck className="size-4" aria-hidden /> : null}
@@ -331,7 +333,7 @@ export function OrderDetailPage() {
 
           <Card>
             <CardHeader title={t('order.actions')} />
-            <div className="grid gap-2 p-5">
+            <div className="grid gap-2 p-4">
               {open && can('checkin') && hasPending ? (
                 <Button onClick={() => setDialog('collect')}>
                   <TestTube className="size-4" />

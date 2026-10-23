@@ -2,9 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChartLine, CheckCheck, ExternalLink, History, Printer, RotateCcw, Save, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FlagBadge, ResultStatusBadge, UrgentBadge, isCritical } from '../../components/lab'
+import { FlagBadge, ResultStatusBadge, isCritical } from '../../components/lab'
 import {
-  Badge,
   Button,
   Card,
   ColorDot,
@@ -28,7 +27,7 @@ import { useLabTests } from '../../lib/catalog'
 import { useI18n } from '../../lib/i18n'
 import { describe, evaluate, pickRange } from '../../lib/results'
 import { useOrder } from '../orders/OrderDetailPage'
-import { PatientPhoto } from '../../components/PatientPhoto'
+import { PatientBand } from '../../components/PatientBand'
 
 type Draft = { value: string; comment: string }
 
@@ -169,29 +168,18 @@ function Entry({ order }: { order: OrderDetail }) {
 
   return (
     <div className="pb-24">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <PatientPhoto patientId={order.patient.id} photoAt={order.patient.photoAt} name={order.patient.fullName} size="md" />
-          <div>
-            <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold text-ink">
-              {order.patient.fullName}
-              <Badge>
-                HN <span className="font-mono">{order.patient.hn}</span>
-              </Badge>
-              {order.urgent ? <UrgentBadge /> : null}
-              {dep ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-2.5 py-0.5 text-sm font-semibold text-ink">
-                  <ColorDot color={dep.color} />
-                  {dep.name}
-                </span>
-              ) : null}
-            </h1>
-            <p className="mt-0.5 text-sm text-ink-muted">
-              {order.patient.ageYears !== null ? `${t('patient.ageYears', { n: order.patient.ageYears })} · ` : ''}
-              {t(`sex.${order.patient.sex}`)} · {formatDateTime(order.orderedAt)} · <span className="font-mono">{order.orderNo}</span>
-            </p>
-          </div>
-        </div>
+      <h1 className="sr-only">{order.patient.fullName}</h1>
+      <PatientBand patient={order.patient} urgent={order.urgent} critical={order.items.some((i) => isCritical(i.flag))} />
+      <div className="mb-4 mt-3 flex flex-wrap items-center justify-between gap-3 px-1">
+        <p className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+          {dep ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-surface px-2.5 py-0.5 font-semibold text-ink">
+              <ColorDot color={dep.color} />
+              {dep.name}
+            </span>
+          ) : null}
+          <span className="font-mono">{order.orderNo}</span> · {formatDateTime(order.orderedAt)}
+        </p>
         <div className="flex flex-wrap gap-2">
           <Link to={`/patients/${order.patient.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline">
             {t('result.patientHistory')} <ExternalLink className="size-3.5" />
@@ -202,8 +190,8 @@ function Entry({ order }: { order: OrderDetail }) {
         </div>
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[15rem_1fr]">
-        <Card className="lg:sticky lg:top-20">
+      <div className="grid items-start gap-4 lg:grid-cols-[15rem_1fr]">
+        <Card className="lg:sticky lg:top-36">
           <div className="space-y-3 p-4">
             <SearchInput value={jump} onChange={setJump} placeholder={t('result.jump')} />
             <p className="text-xs text-ink-muted">{t('result.enteredOf', { n: entered, total: active })}</p>
@@ -248,14 +236,14 @@ function Entry({ order }: { order: OrderDetail }) {
           </div>
         </Card>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           {departments.filter(([id]) => id === depId).map(([depId, dep]) => {
             const items = order.items.filter((i) => i.departmentId === depId && (!needle || `${i.testCode} ${i.testNameEn}`.toLowerCase().includes(needle)))
             if (items.length === 0) return null
             const done = items.filter((i) => i.resultStatus !== 'Pending').length
             return (
               <Card key={depId} id={`dep-${depId}`} className="scroll-mt-20 overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-5 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-3">
                   <h2 className="flex items-center gap-2 font-semibold text-ink">
                     <ColorDot color={dep.color} />
                     {dep.name}
@@ -391,7 +379,7 @@ function Entry({ order }: { order: OrderDetail }) {
             <TriangleAlert className="size-5 shrink-0 text-amber-500" aria-hidden />
             <p className="text-sm text-ink">{t('result.discardUnsaved', { n: dirtyItems.length })}</p>
           </div>
-          <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-rule pt-4">
+          <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-rule pt-4">
             <Button variant="secondary" onClick={() => setSwitchTo(null)} disabled={run.isPending}>
               {t('result.stayHere')}
             </Button>

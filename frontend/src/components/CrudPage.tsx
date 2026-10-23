@@ -99,7 +99,7 @@ export function CrudPage<T extends Row, TInput extends { isActive: boolean }>({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={title} description={description}>
         <Button onClick={() => (save.reset(), setEditing({ row: null, value: blank }))}>
           <Plus className="size-4" />
@@ -171,7 +171,7 @@ export function CrudPage<T extends Row, TInput extends { isActive: boolean }>({
         <Modal title={t('common.deleteConfirmTitle')} onClose={() => setDeleting(null)}>
           <p className="text-sm text-ink">{t('common.deleteConfirm')}</p>
           <ErrorNote error={remove.error} />
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setDeleting(null)}>
               {t('common.cancel')}
             </Button>

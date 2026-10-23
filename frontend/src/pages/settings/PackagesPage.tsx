@@ -55,7 +55,7 @@ function PackageForm({ value: v, set }: { value: PackageInput; set: (patch: Part
   const toggle = (id: string) => set({ testIds: v.testIds.includes(id) ? v.testIds.filter((x) => x !== id) : [...v.testIds, id] })
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2">
       <div className="space-y-3">
         <SearchInput value={search} onChange={setSearch} placeholder={t('order.searchTests')} />
         <Select value={department} onChange={(e) => setDepartment(e.target.value)} aria-label={t('test.department')}>

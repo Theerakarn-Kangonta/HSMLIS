@@ -9,7 +9,7 @@ export const emptyFilters: Filters = { from: '', to: '', referrerId: '', departm
 
 /**
  * The filters most lab lists share: dates, referring unit, department and test.
- * `compact` drops the labels above the controls and renders them inline, for a one-line toolbar.
+ * `compact` drops the labels above the controls and renders them inline, inside a list's toolbar.
  */
 export function FilterBar({ value, onChange, show = ['dates', 'referrer', 'department', 'test'], compact = false }: {
   value: Filters
@@ -55,6 +55,16 @@ export function FilterBar({ value, onChange, show = ['dates', 'referrer', 'depar
             {(departments.data ?? []).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.nameTh ?? d.nameEn}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        {show.includes('test') ? (
+          <Select aria-label={t('filter.test')} title={t('filter.test')} value={value.testId} onChange={(e) => set({ testId: e.target.value })} className="w-44">
+            <option value="">{t('filter.allTests')}</option>
+            {visibleTests.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.code} · {x.nameEn}
               </option>
             ))}
           </Select>

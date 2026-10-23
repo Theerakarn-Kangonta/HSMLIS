@@ -12,7 +12,7 @@ export function DepartmentsPage() {
       queryKey="departments"
       service={api.departments}
       addLabel={t('departments.add')}
-      blank={{ code: '', nameEn: '', nameTh: null, color: '#4f46e5', description: null, isActive: true }}
+      blank={{ code: '', nameEn: '', nameTh: null, color: '#146b7a', description: null, isActive: true }}
       toInput={({ id: _id, ...rest }) => rest}
       matches={(d, q) => `${d.code} ${d.nameEn} ${d.nameTh ?? ''}`.toLowerCase().includes(q)}
       columns={[

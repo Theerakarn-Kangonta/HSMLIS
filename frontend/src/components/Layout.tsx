@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Bell,ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowLeft, Bell,ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ScanBarcode, Search, SlidersHorizontal, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { BackLinkProvider } from '../lib/backLink'
 import { useI18n } from '../lib/i18n'
 import { findTrail, onPath, visibleGroups, type NavGroup, type NavItem } from '../lib/nav'
+import { useScanAnywhere } from '../lib/scan'
 import { Button, DisplayToggles, Logo, Modal, focusRing } from './ui'
 
 function useStoredFlag(key: string, initial = false) {
@@ -153,7 +154,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <NavTree onNavigate={onNavigate} />
-      <div className="border-t border-rule px-5 py-3 text-xs font-semibold tracking-wide text-ink-subtle">HSMLIS</div>
+      <div className="border-t border-rule px-4 py-3 text-xs font-semibold tracking-wide text-ink-subtle">HSMLIS</div>
     </>
   )
 }
@@ -331,7 +332,7 @@ function IdleGuard() {
   return (
     <Modal title={t('idle.title')} onClose={stay}>
       <p className="text-sm text-ink">{t('idle.body', { n: left })}</p>
-      <div className="mt-5 flex justify-end gap-2">
+      <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={signOut}>
           {t('nav.logout')}
         </Button>
@@ -348,6 +349,9 @@ export function Layout() {
   const [back, setBack] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const trail = findTrail(location.pathname)
+  const { can } = useAuth()
+  const scanner = can('orders')
+  useScanAnywhere(scanner)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -410,13 +414,23 @@ export function Layout() {
             ) : null}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            {scanner ? (
+              <span className="mr-2 hidden items-center gap-1.5 rounded-full border border-rule px-2.5 py-1 text-xs text-ink-muted md:inline-flex" title={t('scan.readyHint')}>
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full rounded-full bg-emerald-400 opacity-60 motion-safe:animate-ping" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                </span>
+                <ScanBarcode className="size-3.5" aria-hidden />
+                {t('scan.ready')}
+              </span>
+            ) : null}
             <DisplayToggles />
             <Notifications />
             <ProfileMenu />
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 print:p-0">
+        <main className="flex-1 p-3 sm:p-4 print:p-0">
           <div className="mx-auto max-w-[100rem]">
             <BackLinkProvider value={setBack}>
               <Outlet />

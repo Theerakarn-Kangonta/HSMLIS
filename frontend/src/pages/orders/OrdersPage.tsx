@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FilterBar, filterQuery, filtersFromParams, type Filters } from '../../components/FilterBar'
 import { OrderTable } from '../../components/OrderTable'
-import { Card, EmptyState, ErrorNote, Field, LinkButton, PageHeader, Pager, SearchInput, Select, Toolbar, useDebounced } from '../../components/ui'
+import { Card, EmptyState, ErrorNote, LinkButton, PageHeader, Pager, SearchInput, Select, Toolbar, useDebounced } from '../../components/ui'
 import { api, type OrderStatus } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
 
@@ -31,30 +31,26 @@ export function OrdersPage() {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('orders.title')} description={t('orders.subtitle')}>
         <LinkButton to="/lab-orders/new">
           <Plus className="size-4" />
           {t('orders.new')}
         </LinkButton>
       </PageHeader>
-      <Card className="px-5 py-4">
-        <FilterBar value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
-      </Card>
       <Card>
         <Toolbar>
-          <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={t('orders.searchPlaceholder')} className="w-full max-w-md" />
-          <Field label={t('order.status')}>
-            <Select value={status} onChange={(e) => (setStatus(e.target.value as StatusChoice), setPage(1))} className="w-48">
-              <option value="">{t('common.all')}</option>
-              <option value="open">{t('orders.statusOpen')}</option>
-              {statuses.map((s) => (
-                <option key={s} value={s}>
-                  {t(`orderStatus.${s}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={t('orders.searchPlaceholder')} className="w-full sm:w-72" />
+          <Select aria-label={t('order.status')} title={t('order.status')} value={status} onChange={(e) => (setStatus(e.target.value as StatusChoice), setPage(1))} className="w-48">
+            <option value="">{t('orders.allStatuses')}</option>
+            <option value="open">{t('orders.statusOpen')}</option>
+            {statuses.map((s) => (
+              <option key={s} value={s}>
+                {t(`orderStatus.${s}`)}
+              </option>
+            ))}
+          </Select>
+          <FilterBar compact value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
         </Toolbar>
         <ErrorNote error={query.error} />
         {query.data && query.data.total === 0 ? (

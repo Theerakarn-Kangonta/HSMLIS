@@ -126,13 +126,13 @@ export function DashboardPage() {
           <div className="grid gap-4 xl:grid-cols-3">
             <Card className="xl:col-span-2">
               <CardHeader title={t(byMonth ? 'dash.trendMonth' : 'dash.trend')} description={t(byMonth ? 'dash.trendHintMonth' : 'dash.trendHint')} />
-              <div className="p-5">
+              <div className="p-4">
                 <ComboChart
                   data={trend}
                   xLabel={(row) => (byMonth ? formatMonthShort(row.day) : formatDayShort(row.day))}
                   tooltipLabel={(row) => (byMonth ? formatMonthShort(row.day) : formatDate(row.day))}
                   bars={[
-                    { label: t('dash.seriesPatients'), color: '#6366f1', value: (row) => row.patients, format: formatNumber },
+                    { label: t('dash.seriesPatients'), color: '#2a8a9b', value: (row) => row.patients, format: formatNumber },
                     { label: t('dash.seriesRejected'), color: '#ef4444', value: (row) => row.rejected, format: formatNumber },
                   ]}
                   line={{ label: t('dash.seriesRevenue'), color: '#10b981', value: (row) => row.revenue, format: (n) => formatMoney(n) }}
@@ -145,7 +145,7 @@ export function DashboardPage() {
             </Card>
             <Card>
               <CardHeader title={t('dash.workload')} description={t('dash.workloadHint')} />
-              <div className="p-5">
+              <div className="p-4">
                 {d.workload.length === 0 ? (
                   <p className="text-sm text-ink-muted">{t('dash.noData')}</p>
                 ) : (
@@ -159,7 +159,7 @@ export function DashboardPage() {
             <CardHeader title={t('dash.tatTitle')} description={t('dash.tatHint')}>
               <Tabs value={measure} onChange={setMeasure} tabs={[{ value: 'avg', label: t('dash.average') }, { value: 'median', label: t('dash.median') }]} />
             </CardHeader>
-            <div className="grid gap-6 p-5 lg:grid-cols-[1fr_1.4fr]">
+            <div className="grid gap-6 p-4 lg:grid-cols-[1fr_1.4fr]">
               <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
                 <div className="rounded-lg bg-page p-4">
                   <p className="text-xs text-ink-muted">{t('dash.tatTotal')}</p>
@@ -181,7 +181,7 @@ export function DashboardPage() {
                 </div>
               </div>
               <div>
-                <ol className="mb-5 flex items-start justify-between gap-1 overflow-x-auto pb-1">
+                <ol className="mb-4 flex items-start justify-between gap-1 overflow-x-auto pb-1">
                   {stageLabels.map((stage, i) => {
                     const Icon = stepIcons[i]
                     const count = i === 0 ? d.status.total - d.status.cancelled : d.steps[i - 1].count
@@ -221,12 +221,12 @@ export function DashboardPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             <Card>
               <CardHeader title={t('dash.statusTitle')} />
-              <div className="p-5">
+              <div className="p-4">
                 <Donut
                   centerLabel={t('dash.orders')}
                   parts={[
                     { label: t('orderStatus.Completed'), value: d.status.completed, color: '#10b981', to: statusLink('Completed') },
-                    { label: t('orderStatus.InProgress'), value: d.status.inProgress, color: '#6366f1', to: statusLink('InProgress') },
+                    { label: t('orderStatus.InProgress'), value: d.status.inProgress, color: '#2a8a9b', to: statusLink('InProgress') },
                     { label: t('orderStatus.AwaitingCollection'), value: d.status.awaiting, color: '#f59e0b', to: statusLink('AwaitingCollection') },
                     { label: t('orderStatus.Cancelled'), value: d.status.cancelled, color: '#94a3b8', to: statusLink('Cancelled') },
                   ]}
@@ -246,13 +246,13 @@ export function DashboardPage() {
             </Card>
             <Card>
               <CardHeader title={t('dash.topTests')} />
-              <div className="p-5">
+              <div className="p-4">
                 {d.topTests.length === 0 ? <p className="text-sm text-ink-muted">{t('dash.noData')}</p> : <HorizontalBars rows={d.topTests.map((x) => ({ label: x.name, value: x.count, to: x.id ? ordersLink({ testId: x.id }) : null }))} />}
               </div>
             </Card>
             <Card>
               <CardHeader title={t('dash.revenueByDepartment')} description={t('dash.revenueByDepartmentHint')} />
-              <div className="p-5">
+              <div className="p-4">
                 {d.revenueByDepartment.length === 0 ? (
                   <p className="text-sm text-ink-muted">{t('dash.noData')}</p>
                 ) : (

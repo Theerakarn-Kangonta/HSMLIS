@@ -58,7 +58,7 @@ export function ResultsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('results.title')} description={t('result.oneDepartmentHint')} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label={t('results.kpiEntry')} value={formatNumber(kpi.data?.pendingEntry ?? 0)} icon={ClipboardPen} tone="accent" onClick={() => setStage('Entry')} active={stage === 'Entry'} />
@@ -66,13 +66,11 @@ export function ResultsPage() {
         <KpiCard label={t('results.kpiApprove')} value={formatNumber(kpi.data?.pendingApprove ?? 0)} icon={ShieldCheck} tone="success" onClick={() => setStage('Approve')} active={stage === 'Approve'} />
         <KpiCard label={t('results.kpiCritical')} value={formatNumber(kpi.data?.criticalOpen ?? 0)} hint={t('results.kpiCriticalHint')} icon={BellRing} tone="danger" onClick={() => setStage('Critical')} active={stage === 'Critical'} />
       </div>
-      <Card className="px-5 py-4">
-        <FilterBar value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
-      </Card>
       <Card>
         <Toolbar>
           <Tabs value={stage} onChange={setStage} tabs={STAGES.map((s) => ({ value: s, label: t(`stageTab.${s}`) }))} />
-          <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={t('orders.searchPlaceholder')} className="w-full max-w-sm" />
+          <SearchInput value={search} onChange={(v) => (setSearch(v), setPage(1))} placeholder={t('orders.searchPlaceholder')} className="w-full sm:w-72" />
+          <FilterBar compact value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
         </Toolbar>
         <ErrorNote error={list.error} />
         {list.data && list.data.total === 0 ? (
@@ -128,7 +126,7 @@ function WorklistTable({ rows, loading }: { rows: WorklistRow[] | undefined; loa
                 {r.hn}
               </td>
               <td className={tdClass} data-label={t('patient.name')}>
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 whitespace-nowrap">
                   <PatientPhoto patientId={r.patientId} photoAt={r.patientPhotoAt} name={r.patientName} />
                   {r.patientName}
                 </span>

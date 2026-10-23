@@ -20,7 +20,7 @@ export function GeneralPage() {
     { value: 'security', label: t('general.tabSecurity') },
   ]
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('general.title')} description={t('general.subtitle')} />
       <Tabs value={tab} onChange={setTab} tabs={tabs} />
       {tab === 'organization' ? <OrganizationForm org={me.organization} /> : null}
@@ -28,7 +28,7 @@ export function GeneralPage() {
       {tab === 'preferences' ? (
         <Card className="max-w-2xl">
           <CardHeader title={t('general.tabPreferences')} description={t('general.preferencesHint')} />
-          <div className="space-y-4 p-5 text-sm">
+          <div className="space-y-4 p-4 text-sm">
             <div className="flex items-center justify-between gap-4">
               <span className="text-ink">{t('general.languageTheme')}</span>
               <DisplayToggles />
@@ -67,7 +67,7 @@ function OrganizationForm({ org }: { org: Organization }) {
   return (
     <Card className="max-w-3xl">
       <CardHeader title={t('general.tabOrganization')} description={t('general.organizationHint')} />
-      <form onSubmit={submit} className="grid gap-4 p-5 sm:grid-cols-2">
+      <form onSubmit={submit} className="grid gap-4 p-4 sm:grid-cols-2">
         <Field label={t('org.nameTh')} className="sm:col-span-2">
           <Input value={f.nameTh} onChange={(e) => set({ nameTh: e.target.value })} required maxLength={200} />
         </Field>
@@ -129,7 +129,7 @@ function ProfileForm({ me }: { me: Me }) {
   return (
     <Card className="max-w-3xl">
       <CardHeader title={t('general.tabProfile')} />
-      <form onSubmit={submit} className="grid gap-4 p-5 sm:grid-cols-2">
+      <form onSubmit={submit} className="grid gap-4 p-4 sm:grid-cols-2">
         <Field label={t('patient.firstNameTh')}>
           <Input value={f.firstNameTh} onChange={(e) => set({ firstNameTh: e.target.value })} required maxLength={80} />
         </Field>
@@ -187,10 +187,10 @@ function SecurityForm({ me }: { me: Me }) {
     change.mutate()
   }
   return (
-    <div className="grid max-w-4xl gap-5 lg:grid-cols-2">
+    <div className="grid max-w-4xl gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader title={t('general.changePassword')} description={t('general.changePasswordHint')} />
-        <form onSubmit={submit} className="space-y-4 p-5">
+        <form onSubmit={submit} className="space-y-4 p-4">
           <Field label={t('general.currentPassword')}>
             <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
           </Field>
@@ -210,7 +210,7 @@ function SecurityForm({ me }: { me: Me }) {
       </Card>
       <Card>
         <CardHeader title={t('general.sessionTitle')} />
-        <div className="space-y-3 p-5 text-sm">
+        <div className="space-y-3 p-4 text-sm">
           <Callout tone="info">{t('general.autoLogoutInfo', { n: me.organization.autoLogoutMinutes })}</Callout>
           <p className="text-ink-muted">{t('general.twoFactorSoon')}</p>
         </div>

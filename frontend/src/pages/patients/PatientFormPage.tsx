@@ -136,10 +136,10 @@ function PatientForm({ patient }: { patient: Patient | null }) {
         </Button>
       </PageHeader>
       <ErrorNote error={readCard.error} />
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="space-y-4">
         <Card>
           <CardHeader title={t('patients.sectionPhoto')} />
-          <div className="flex flex-wrap items-center gap-5 p-5">
+          <div className="flex flex-wrap items-center gap-4 p-4">
             <div className="grid h-40 w-32 shrink-0 place-items-center overflow-hidden rounded-lg border border-rule bg-page text-ink-muted">
               {shownPhoto ? <img src={shownPhoto} alt={t('patients.sectionPhoto')} className="size-full object-cover" /> : <UserRound className="size-12" aria-hidden />}
             </div>
@@ -357,7 +357,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card>
       <CardHeader title={title} />
-      <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
+      <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
     </Card>
   )
 }

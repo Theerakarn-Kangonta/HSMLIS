@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { OrderSummary } from '../lib/api'
 import { useI18n } from '../lib/i18n'
-import { OrderStatusBadge, UrgentBadge } from './lab'
+import { JourneyTrack } from './JourneyTrack'
+import { UrgentBadge } from './lab'
 import { Badge, DataTable, ProgressBar, SkeletonRows, tableBodyClass, tableHeadClass, tableRowClass, tdClass, thClass } from './ui'
 import { PatientPhoto } from './PatientPhoto'
 
@@ -48,7 +49,7 @@ export function OrderTable({ orders, loading, progress = 'approved', actions, li
                 {o.hn}
               </td>
               <td className={tdClass} data-label={t('patient.name')}>
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 whitespace-nowrap">
                   <PatientPhoto patientId={o.patientId} photoAt={o.patientPhotoAt} name={o.patientName} />
                   {o.patientName}
                 </span>
@@ -60,7 +61,7 @@ export function OrderTable({ orders, loading, progress = 'approved', actions, li
                 {formatDateTime(o.orderedAt)}
               </td>
               <td className={tdClass} data-label={t('order.status')}>
-                <OrderStatusBadge status={o.status} />
+                <JourneyTrack order={o} />
               </td>
               <td className={tdClass} data-label={t('order.progress')}>
                 <div className="flex items-center gap-2">

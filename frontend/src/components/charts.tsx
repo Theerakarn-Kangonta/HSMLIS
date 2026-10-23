@@ -58,7 +58,7 @@ export function ComboChart<T>({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-ink-muted">
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-muted">
         {bars.map((b) => (
           <span key={b.label} className="inline-flex items-center gap-1.5">
             <span className="size-2.5 rounded-sm" style={{ backgroundColor: b.color }} />
@@ -217,7 +217,7 @@ export function Donut({ parts, centerLabel }: { parts: { label: string; value: n
   const r = 15.915 // circumference 100, so dash lengths are percentages
   let offset = 25
   return (
-    <div className="flex flex-wrap items-center gap-5">
+    <div className="flex flex-wrap items-center gap-4">
       <svg viewBox="0 0 42 42" className="size-32 shrink-0" role="img" aria-labelledby={id}>
         <title id={id}>{parts.map((p) => `${p.label} ${p.value}`).join(', ')}</title>
         <circle cx="21" cy="21" r={r} fill="none" stroke="var(--color-slate-100)" strokeWidth="5" />

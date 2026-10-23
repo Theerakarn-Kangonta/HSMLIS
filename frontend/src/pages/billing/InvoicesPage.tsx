@@ -54,7 +54,7 @@ export function InvoicesPage() {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('billing.title')} description={t('billing.subtitle')} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label={t('billing.revenueToday')} value={formatMoney(kpi.data?.revenueToday ?? 0)} icon={Banknote} tone="success" />
@@ -62,7 +62,7 @@ export function InvoicesPage() {
         <KpiCard label={t('billing.unpaid')} value={formatMoney(kpi.data?.unpaidAmount ?? 0)} hint={t('billing.invoiceCount', { n: formatNumber(kpi.data?.unpaidCount ?? 0) })} icon={Hourglass} tone="danger" />
         <KpiCard label={t('billing.paidToday')} value={formatNumber(kpi.data?.paidTodayCount ?? 0)} hint={t('billing.payments')} icon={CircleCheck} tone="accent" />
       </div>
-      <Card className="px-5 py-4">
+      <Card className="px-4 py-4">
         <FilterBar value={filters} onChange={(f) => (setFilters(f), setPage(1))} show={['dates', 'referrer']} />
       </Card>
       <Card>

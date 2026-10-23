@@ -40,7 +40,7 @@ export function PatientDetailPage() {
   if (!p) return patient.error ? <ErrorNote error={patient.error} /> : <SkeletonCards />
 
   const rows = (pairs: [string, string | null | undefined][]) => (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 p-5 text-sm">
+    <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 p-4 text-sm">
       {pairs.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-ink-muted">{label}</dt>
@@ -51,7 +51,7 @@ export function PatientDetailPage() {
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
@@ -96,7 +96,7 @@ export function PatientDetailPage() {
       />
 
       {tab === 'general' ? (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title={t('patients.sectionPersonal')} />
             {rows([
@@ -135,7 +135,7 @@ export function PatientDetailPage() {
       {tab === 'orders' ? (
         <Card>
           <ErrorNote error={orders.error} />
-          {orders.data?.length === 0 ? <p className="p-5 text-sm text-ink-muted">{t('patients.noOrders')}</p> : <OrderTable orders={orders.data} loading={orders.isLoading} />}
+          {orders.data?.length === 0 ? <p className="p-4 text-sm text-ink-muted">{t('patients.noOrders')}</p> : <OrderTable orders={orders.data} loading={orders.isLoading} />}
         </Card>
       ) : null}
 
@@ -152,15 +152,15 @@ export function PatientDetailPage() {
                     .filter((i) => i.resultStatus === 'Approved')
                     .map((i) => (
                       <tr key={i.id}>
-                        <td className="px-5 py-2 font-mono text-xs text-ink-muted">{i.testCode}</td>
-                        <td className="px-5 py-2">{i.testNameEn}</td>
-                        <td className="px-5 py-2 font-medium">
+                        <td className="px-4 py-2 font-mono text-xs text-ink-muted">{i.testCode}</td>
+                        <td className="px-4 py-2">{i.testNameEn}</td>
+                        <td className="px-4 py-2 font-medium">
                           {i.value} <span className="text-xs font-normal text-ink-muted">{i.unit}</span>
                         </td>
-                        <td className="px-5 py-2">
+                        <td className="px-4 py-2">
                           <FlagBadge flag={i.flag} />
                         </td>
-                        <td className="px-5 py-2 text-xs text-ink-muted">{i.refText}</td>
+                        <td className="px-4 py-2 text-xs text-ink-muted">{i.refText}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -174,7 +174,7 @@ export function PatientDetailPage() {
         <Modal title={t('patients.deleteTitle')} onClose={() => setConfirm(false)}>
           <p className="text-sm text-ink">{t('patients.deleteHint')}</p>
           <ErrorNote error={remove.error} />
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirm(false)}>
               {t('common.cancel')}
             </Button>

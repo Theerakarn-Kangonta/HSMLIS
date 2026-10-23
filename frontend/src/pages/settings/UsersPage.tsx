@@ -65,7 +65,7 @@ export function UsersPage() {
   const myLevel = me ? level(me.user.role) : 3
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('users.title')} description={t('users.subtitle')}>
         <Button onClick={() => setEditing('new')}>
           <Plus className="size-4" />
@@ -193,7 +193,7 @@ function UserDialog({ user, myLevel, onClose }: { user: User | null; myLevel: nu
 
   return (
     <Modal title={user ? t('users.editTitle', { name: user.fullName }) : t('users.add')} size="lg" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t('login.username')} hint={user ? undefined : t('users.usernameHint')}>
             <Input value={f.username} onChange={(e) => set({ username: e.target.value })} required disabled={!!user} pattern="[A-Za-z0-9._\-]+" minLength={3} maxLength={60} autoComplete="off" />

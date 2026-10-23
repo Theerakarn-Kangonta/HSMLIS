@@ -21,7 +21,7 @@ export function PatientsPage() {
   })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('patients.title')} description={t('patients.subtitle')}>
         <LinkButton to="/patients/new">
           <Plus className="size-4" />
@@ -57,7 +57,7 @@ export function PatientsPage() {
                     {p.hn}
                   </td>
                   <td className={tdClass} data-label={t('patient.name')}>
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 whitespace-nowrap">
                       <PatientPhoto patientId={p.id} photoAt={p.photoAt} name={p.fullName} />
                       {p.fullName}
                     </span>

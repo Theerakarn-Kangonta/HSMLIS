@@ -4,6 +4,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { api, type Container, type OrderDetail } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { ContainerStatusBadge } from './lab'
+import { PatientBand } from './PatientBand'
 import { Button, DialogActions, ErrorNote, Field, Input, Modal, Select, Textarea, useToast } from './ui'
 
 const CONDITIONS = ['ปกติ', 'Hemolysis', 'Lipemic', 'Icteric', 'Clotted', 'ปริมาณน้อย']
@@ -62,6 +63,8 @@ export function CollectDialog({ order, onClose }: { order: OrderDetail; onClose:
   const pending = order.containers.filter((c) => c.status === 'Pending')
   return (
     <Modal title={t('specimen.collectTitle')} description={`${order.orderNo} · ${order.patient.fullName}`} onClose={onClose}>
+      <PatientBand patient={order.patient} sticky={false} />
+      <div className="h-4" />
       <ul className="divide-y divide-rule">
         {order.containers.map((c) => (
           <ContainerRow
@@ -112,6 +115,8 @@ export function ReceiveDialog({ order, onClose, onAllReceived }: { order: OrderD
   const open = order.containers.filter((c) => c.status === 'Pending' || c.status === 'Collected')
   return (
     <Modal title={t('specimen.receiveTitle')} description={t('specimen.receiveHint', { no: order.orderNo })} onClose={onClose} size="lg">
+      <PatientBand patient={order.patient} sticky={false} />
+      <div className="h-4" />
       <ul className="divide-y divide-rule">
         {order.containers.map((c) => (
           <ContainerRow
@@ -181,6 +186,8 @@ export function RejectDialog({ order, container, onClose }: { order: OrderDetail
   }
   return (
     <Modal title={t('specimen.rejectTitle')} description={order.orderNo} onClose={onClose}>
+      <PatientBand patient={order.patient} sticky={false} />
+      <div className="h-4" />
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('specimen.container')}>
           <Select value={containerId} onChange={(e) => setContainerId(e.target.value)} required>

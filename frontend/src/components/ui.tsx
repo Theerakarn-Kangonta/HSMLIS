@@ -47,7 +47,7 @@ export const focusRing = 'focus-visible:outline-2 focus-visible:outline-offset-2
 
 const buttonBase = `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-[background-color,border-color,transform] duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0 pointer-coarse:h-11 ${focusRing}`
 
-const buttonSizes = { md: 'h-9 px-4 text-sm', sm: 'h-8 px-3 text-xs', lg: 'h-11 px-5 text-base' }
+const buttonSizes = { md: 'h-9 px-4 text-sm', sm: 'h-8 px-3 text-xs', lg: 'h-11 px-4 text-base' }
 
 export type ButtonVariant = keyof typeof buttonVariants
 
@@ -218,7 +218,7 @@ export function Card({ id, className = '', children }: { id?: string; className?
 /** The title row of a card, with optional actions on the right. */
 export function CardHeader({ title, description, icon: Icon, children }: { title: ReactNode; description?: ReactNode; icon?: LucideIcon; children?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-5 py-3.5">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-2.5">
       <div className="flex min-w-0 items-center gap-2.5">
         {Icon ? <Icon className="size-4.5 shrink-0 text-brand-600" aria-hidden /> : null}
         <div className="min-w-0">
@@ -233,8 +233,10 @@ export function CardHeader({ title, description, icon: Icon, children }: { title
 
 export function Logo({ className = 'size-9' }: { className?: string }) {
   return (
-    <span className={`flex shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-sm ${className}`}>
-      <FlaskConical className="size-3/5" />
+    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-brand-600 text-white shadow-sm ${className}`}>
+      {/* The gold band is a specimen tube's cap. */}
+      <span className="absolute inset-x-0 top-0 h-[22%] bg-cap" aria-hidden />
+      <FlaskConical className="relative mt-[12%] size-1/2" />
     </span>
   )
 }
@@ -263,7 +265,7 @@ export function PageHeader({ title, description, back, children }: { title: Reac
   // The back link is drawn in the app shell's sticky top bar, so it stays reachable while scrolling.
   useBackLink(back)
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 print:hidden">
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 print:hidden">
       <div className="flex min-w-0 items-start gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
@@ -278,7 +280,7 @@ export function PageHeader({ title, description, back, children }: { title: Reac
 /** Row above a section's content: filters on the left, actions on the right. */
 export function Toolbar({ actions, children }: { actions?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-3 print:hidden">
+    <div className="flex flex-wrap items-end justify-between gap-2.5 px-4 py-2.5 print:hidden">
       <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">{children}</div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
@@ -319,7 +321,8 @@ export function Badge({ tone = 'neutral', icon: Icon, className = '', children }
 
 /** A department's colour as a dot, next to its name. */
 export function ColorDot({ color, className = '' }: { color: string; className?: string }) {
-  return <span className={`inline-block size-2.5 shrink-0 rounded-full ${className}`} style={{ backgroundColor: color }} aria-hidden />
+  // A specimen tube's cap: departments are told apart the way the lab tells tubes apart.
+  return <span className={`inline-block h-2.5 w-3 shrink-0 rounded-[4px_4px_1px_1px] shadow-[inset_0_-2px_0_rgb(0_0_0/0.18)] ${className}`} style={{ backgroundColor: color }} aria-hidden />
 }
 
 export function EmptyState({ icon: Icon, title, hint, children }: { icon: LucideIcon; title: string; hint?: string; children?: ReactNode }) {
@@ -432,8 +435,8 @@ export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; on
 // ---------- tables ----------
 
 export const tableHeadClass = 'border-b border-rule bg-page text-left text-xs font-semibold whitespace-nowrap text-ink-muted'
-export const thClass = 'px-4 py-2.5'
-export const tdClass = 'px-4 py-3'
+export const thClass = 'px-3 py-2'
+export const tdClass = 'px-3 py-2'
 export const tableBodyClass = 'divide-y divide-rule'
 export const tableRowClass = 'transition-colors duration-150 hover:bg-page'
 
@@ -530,7 +533,7 @@ export function Modal({ title, description, onClose, size = 'md', children }: { 
         tabIndex={-1}
         className={`w-full ${modalSizes[size]} rounded-xl border border-rule bg-surface shadow-xl outline-none motion-safe:animate-dialog`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-rule py-3 pl-5 pr-3">
+        <div className="flex items-start justify-between gap-3 border-b border-rule py-2.5 pl-4 pr-2">
           <div className="min-w-0 pt-0.5">
             <h2 id={titleId} className="text-[1.0625rem] font-semibold text-ink">
               {title}
@@ -541,7 +544,7 @@ export function Modal({ title, description, onClose, size = 'md', children }: { 
             <X className="size-5" />
           </IconButton>
         </div>
-        <div data-dialog-body className="max-h-[calc(100vh-10rem)] overflow-y-auto p-5">
+        <div data-dialog-body className="max-h-[calc(100vh-8rem)] overflow-y-auto p-4">
           {children}
         </div>
       </div>

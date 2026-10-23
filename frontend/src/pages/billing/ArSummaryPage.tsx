@@ -19,7 +19,7 @@ export function ArSummaryPage() {
   const items = (d?.items ?? []).filter((i) => !needle || `${i.invoiceNo} ${i.hn} ${i.patientName}`.toLowerCase().includes(needle))
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader title={t('ar.title')} description={t('ar.subtitle')} />
       <ErrorNote error={query.error} />
       <div className="grid gap-4 sm:grid-cols-3">
@@ -29,7 +29,7 @@ export function ArSummaryPage() {
       </div>
       <Card>
         <CardHeader title={t('ar.aging')} />
-        <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           {(d?.buckets ?? []).map((b, i) => (
             <div key={b.label} className={`rounded-lg border p-4 ${bucketTones[i]}`}>
               <p className="text-xs font-semibold">{t('ar.days', { range: b.label })}</p>
