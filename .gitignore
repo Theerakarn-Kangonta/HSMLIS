@@ -22,3 +22,6 @@ appsettings.Production.json
 .vscode/
 .idea/
 .DS_Store
+
+# Local-only compose settings (holds the QZ signing key)
+docker-compose.override.yml

@@ -9,7 +9,7 @@ public static class Map
 {
     public static UserDto ToDto(this User u) => new(
         u.Id, u.Username, u.FirstNameTh, u.LastNameTh, u.FirstNameEn, u.LastNameEn, u.FullName, u.Position,
-        u.Email, u.Phone, u.EmployeeCode, u.BranchId, u.Role, u.DepartmentIds, u.IsActive, u.CreatedAt);
+        u.Email, u.Phone, u.EmployeeCode, u.LicenseNo, u.BranchId, u.Role, u.DepartmentIds, u.IsActive, u.CreatedAt);
 
     public static OrganizationDto ToDto(this Organization o) => new(
         o.Id, o.Code, o.NameTh, o.NameEn, o.Email, o.Phone, o.TaxId, o.Address, o.TimeZone, o.AutoLogoutMinutes);
@@ -61,7 +61,8 @@ public static class Map
         p.Id, p.Hn, p.Prefix, p.FirstNameTh, p.LastNameTh, p.FirstNameEn, p.LastNameEn, p.FullNameTh, p.CitizenId, p.Sex,
         p.BirthDate, ResultRules.AgeInYears(p.BirthDate, today), p.BloodGroup, p.Nationality, p.Phone, p.Email, p.LineId,
         p.Address, p.Province, p.PostCode, p.EmergencyName, p.EmergencyPhone, p.EmergencyRelation, p.Allergies,
-        p.Conditions, p.Medications, p.CreatedAt);
+        p.Conditions, p.Medications, p.CreatedAt, p.PrefixEn, p.Subdistrict, p.District, p.Occupation, p.MaritalStatus,
+        p.CardIssuer, p.CardIssueDate, p.CardExpiryDate, p.PhotoAt);
 
     public static OrderItemDto ToDto(this OrderItem i, IReadOnlyDictionary<Guid, Department> departments)
     {

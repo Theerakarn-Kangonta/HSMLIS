@@ -52,6 +52,19 @@ public class PatientsController(IPatientService patients) : ControllerBase
         await patients.DeleteAsync(id, ct);
         return NoContent();
     }
+
+    [HttpGet("{id:guid}/photo")]
+    public async Task<IActionResult> Photo(Guid id, CancellationToken ct)
+    {
+        var photo = await patients.GetPhotoAsync(id, ct);
+        return File(photo.Data, photo.ContentType);
+    }
+
+    [HttpPut("{id:guid}/photo")]
+    public Task<PatientDto> SetPhoto(Guid id, PatientPhotoRequest request, CancellationToken ct) => patients.SetPhotoAsync(id, request, ct);
+
+    [HttpDelete("{id:guid}/photo")]
+    public Task<PatientDto> RemovePhoto(Guid id, CancellationToken ct) => patients.RemovePhotoAsync(id, ct);
 }
 
 [ApiController]

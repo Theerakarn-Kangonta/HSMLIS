@@ -3,6 +3,7 @@ import { UserPlus, X } from 'lucide-react'
 import { useState } from 'react'
 import { api, type Patient } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { PatientPhoto } from './PatientPhoto'
 import { Badge, LinkButton, SearchInput, useDebounced } from './ui'
 
 /** Finds a patient by HN or name, or shows the recent ones; the chosen one becomes a chip. */
@@ -16,12 +17,15 @@ export function PatientPicker({ value, onChange, registerHref }: { value: Patien
   if (value) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
-        <div className="min-w-0">
-          <p className="font-semibold text-ink">{value.fullName}</p>
-          <p className="text-xs text-ink-muted">
-            HN <span className="font-mono">{value.hn}</span>
-            {value.ageYears !== null ? ` · ${t('patient.ageYears', { n: value.ageYears })}` : ''} · {t(`sex.${value.sex}`)}
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <PatientPhoto patientId={value.id} photoAt={value.photoAt} name={value.fullName} size="md" />
+          <div className="min-w-0">
+            <p className="font-semibold text-ink">{value.fullName}</p>
+            <p className="text-xs text-ink-muted">
+              HN <span className="font-mono">{value.hn}</span>
+              {value.ageYears !== null ? ` · ${t('patient.ageYears', { n: value.ageYears })}` : ''} · {t(`sex.${value.sex}`)}
+            </p>
+          </div>
         </div>
         <button type="button" onClick={() => onChange(null)} className="flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink" aria-label={t('order.changePatient')} title={t('order.changePatient')}>
           <X className="size-4" />
@@ -47,7 +51,8 @@ export function PatientPicker({ value, onChange, registerHref }: { value: Patien
           {list?.map((p) => (
             <li key={p.id}>
               <button type="button" onClick={() => onChange(p)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-page">
-                <span className="min-w-0">
+                <span className="flex min-w-0 items-center gap-2">
+                  <PatientPhoto patientId={p.id} photoAt={p.photoAt} name={p.fullName} zoom={false} />
                   <span className="font-medium text-ink">{p.fullName}</span>
                   <span className="ml-2 text-xs text-ink-muted">{p.ageYears !== null ? t('patient.ageYears', { n: p.ageYears }) : ''}</span>
                 </span>

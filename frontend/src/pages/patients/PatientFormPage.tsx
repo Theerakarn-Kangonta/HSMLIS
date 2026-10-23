@@ -1,14 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { UserRoundSearch } from 'lucide-react'
+import { IdCard, Trash2, UserRound, UserRoundSearch } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { PatientPhoto } from '../../components/PatientPhoto'
 import { Button, Card, CardHeader, ErrorNote, Field, Input, Modal, PageHeader, Select, SkeletonCards, Textarea, useToast } from '../../components/ui'
 import { api, type Patient, type PatientInput, type Sex } from '../../lib/api'
 import { ageFrom, fromBuddhistYear, toBuddhistYear, today } from '../../lib/dates'
+import { fromIdCard, readIdCard } from '../../lib/idCard'
 import { useI18n } from '../../lib/i18n'
 
 const PREFIXES = ['นาย', 'นาง', 'นางสาว', 'เด็กชาย', 'เด็กหญิง', 'ด.ช.', 'ด.ญ.', 'พระ', 'สามเณร', 'แม่ชี', 'Mr.', 'Mrs.', 'Ms.']
+const PREFIXES_EN = ['', 'Mr.', 'Mrs.', 'Miss', 'Ms.', 'Master']
 const BLOOD = ['', 'A', 'B', 'AB', 'O']
+const MARITAL = ['', 'Single', 'Married', 'Widowed', 'Divorced', 'Separated'] as const
+/** The list, plus the current value if it isn't in it (e.g. a title read from an ID card). */
+const withValue = (list: string[], value: string | null) => (value && !list.includes(value) ? [...list, value] : list)
 
 const blank: PatientInput = {
   prefix: 'นาย',
@@ -33,6 +39,14 @@ const blank: PatientInput = {
   allergies: null,
   conditions: null,
   medications: null,
+  prefixEn: null,
+  subdistrict: null,
+  district: null,
+  occupation: null,
+  maritalStatus: null,
+  cardIssuer: null,
+  cardIssueDate: null,
+  cardExpiryDate: null,
 }
 
 export function PatientFormPage() {
@@ -50,14 +64,38 @@ function PatientForm({ patient }: { patient: Patient | null }) {
   const [params] = useSearchParams()
   const [form, setForm] = useState<PatientInput>(() => (patient ? { ...blank, ...patient } : blank))
   const [similar, setSimilar] = useState<Patient[] | null>(null)
+  // The ID card's photo. undefined: unchanged; null: remove; text: the card's JPEG (base64).
+  const [photo, setPhoto] = useState<string | null | undefined>(undefined)
+  const shownPhoto = photo !== undefined ? photo && `data:image/jpeg;base64,${photo}` : patient?.photoAt ? api.patientPhotoUrl(patient.id, patient.photoAt) : null
   const set = <K extends keyof PatientInput>(key: K, value: PatientInput[K]) => setForm({ ...form, [key]: value })
   const text = (key: keyof PatientInput) => ({
     value: (form[key] as string | null) ?? '',
     onChange: (e: { target: { value: string } }) => set(key, (e.target.value || null) as never),
   })
 
+  const readCard = useMutation({
+    mutationFn: readIdCard,
+    onSuccess: (raw) => {
+      setForm((current) => ({ ...current, ...fromIdCard(raw) }))
+      if (raw.photo) setPhoto(raw.photo)
+      setSimilar(null)
+      toast(t('patients.cardRead'))
+    },
+  })
+
   const save = useMutation({
-    mutationFn: () => (patient ? api.updatePatient(patient.id, form) : api.createPatient(form)),
+    mutationFn: async () => {
+      let saved = await (patient ? api.updatePatient(patient.id, form) : api.createPatient(form))
+      if (photo || (photo === null && patient?.photoAt)) {
+        // The patient is saved by now: a failed photo must not make a retry register them twice.
+        try {
+          saved = photo ? await api.setPatientPhoto(saved.id, photo) : await api.removePatientPhoto(saved.id)
+        } catch {
+          toast(t('patients.photoNotSaved'), 'error')
+        }
+      }
+      return saved
+    },
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ['patients'] })
       queryClient.invalidateQueries({ queryKey: ['patients-recent'] })
@@ -91,12 +129,42 @@ function PatientForm({ patient }: { patient: Patient | null }) {
 
   return (
     <div>
-      <PageHeader title={t(patient ? 'patients.editTitle' : 'patients.newTitle')} description={patient ? `HN ${patient.hn}` : t('patients.newSubtitle')} back={patient ? `/patients/${patient.id}` : '/patients'} />
+      <PageHeader title={t(patient ? 'patients.editTitle' : 'patients.newTitle')} description={patient ? `HN ${patient.hn}` : t('patients.newSubtitle')} back={patient ? `/patients/${patient.id}` : '/patients'}>
+        <Button variant="secondary" onClick={() => readCard.mutate()} loading={readCard.isPending} title={t('patients.readCardSimulated')}>
+          <IdCard className="size-4" />
+          {t('patients.readCard')}
+        </Button>
+      </PageHeader>
+      <ErrorNote error={readCard.error} />
       <form onSubmit={submit} className="space-y-5">
+        <Card>
+          <CardHeader title={t('patients.sectionPhoto')} />
+          <div className="flex flex-wrap items-center gap-5 p-5">
+            <div className="grid h-40 w-32 shrink-0 place-items-center overflow-hidden rounded-lg border border-rule bg-page text-ink-muted">
+              {shownPhoto ? <img src={shownPhoto} alt={t('patients.sectionPhoto')} className="size-full object-cover" /> : <UserRound className="size-12" aria-hidden />}
+            </div>
+            <div className="space-y-3">
+              <p className="max-w-sm text-sm text-ink-muted">{t('patients.photoHint')}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => readCard.mutate()} loading={readCard.isPending}>
+                  <IdCard className="size-4" />
+                  {t('patients.readCard')}
+                </Button>
+                {shownPhoto ? (
+                  <Button variant="dangerOutline" onClick={() => setPhoto(null)}>
+                    <Trash2 className="size-4" />
+                    {t('patients.photoRemove')}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Section title={t('patients.sectionPersonal')}>
           <Field label={t('patient.prefix')}>
             <Select value={form.prefix ?? ''} onChange={(e) => set('prefix', e.target.value || null)}>
-              {PREFIXES.map((p) => (
+              {withValue(PREFIXES, form.prefix).map((p) => (
                 <option key={p}>{p}</option>
               ))}
             </Select>
@@ -109,6 +177,15 @@ function PatientForm({ patient }: { patient: Patient | null }) {
           </Field>
           <Field label={t('patient.citizenId')} hint={t('patient.citizenIdHint')}>
             <Input {...text('citizenId')} inputMode="numeric" pattern="\d{13}" maxLength={13} />
+          </Field>
+          <Field label={t('patient.prefixEn')}>
+            <Select value={form.prefixEn ?? ''} onChange={(e) => set('prefixEn', e.target.value || null)}>
+              {withValue(PREFIXES_EN, form.prefixEn).map((p) => (
+                <option key={p} value={p}>
+                  {p || '–'}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label={t('patient.firstNameEn')}>
             <Input {...text('firstNameEn')} maxLength={80} />
@@ -151,6 +228,18 @@ function PatientForm({ patient }: { patient: Patient | null }) {
           <Field label={t('patient.nationality')}>
             <Input {...text('nationality')} maxLength={60} />
           </Field>
+          <Field label={t('patient.occupation')}>
+            <Input {...text('occupation')} maxLength={80} />
+          </Field>
+          <Field label={t('patient.maritalStatus')}>
+            <Select value={form.maritalStatus ?? ''} onChange={(e) => set('maritalStatus', e.target.value || null)}>
+              {MARITAL.map((m) => (
+                <option key={m} value={m}>
+                  {m ? t(`marital.${m}`) : '–'}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </Section>
 
         <Section title={t('patients.sectionContact')}>
@@ -163,14 +252,32 @@ function PatientForm({ patient }: { patient: Patient | null }) {
           <Field label="LINE ID">
             <Input {...text('lineId')} maxLength={60} />
           </Field>
+          <Field label={t('patient.address')} className="sm:col-span-4">
+            <Input {...text('address')} maxLength={400} />
+          </Field>
+          <Field label={t('patient.subdistrict')}>
+            <Input {...text('subdistrict')} maxLength={80} />
+          </Field>
+          <Field label={t('patient.district')}>
+            <Input {...text('district')} maxLength={80} />
+          </Field>
           <Field label={t('patient.province')}>
             <Input {...text('province')} maxLength={80} />
           </Field>
-          <Field label={t('patient.address')} className="sm:col-span-3">
-            <Input {...text('address')} maxLength={400} />
-          </Field>
           <Field label={t('patient.postCode')}>
             <Input {...text('postCode')} inputMode="numeric" maxLength={10} />
+          </Field>
+        </Section>
+
+        <Section title={t('patients.sectionCard')}>
+          <Field label={t('patient.cardIssuer')} className="sm:col-span-2">
+            <Input {...text('cardIssuer')} maxLength={120} />
+          </Field>
+          <Field label={t('patient.cardIssueDate')}>
+            <Input type="date" value={form.cardIssueDate ?? ''} onChange={(e) => set('cardIssueDate', e.target.value || null)} max={today()} />
+          </Field>
+          <Field label={t('patient.cardExpiryDate')}>
+            <Input type="date" value={form.cardExpiryDate ?? ''} onChange={(e) => set('cardExpiryDate', e.target.value || null)} min={form.cardIssueDate ?? undefined} />
           </Field>
         </Section>
 
@@ -214,11 +321,14 @@ function PatientForm({ patient }: { patient: Patient | null }) {
           <ul className="divide-y divide-rule rounded-lg border border-rule">
             {similar.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                <span>
-                  <span className="font-medium text-ink">{p.fullName}</span>
-                  <span className="block text-xs text-ink-muted">
-                    HN {p.hn}
-                    {p.citizenId ? ` · ${p.citizenId}` : ''}
+                <span className="flex items-center gap-2">
+                  <PatientPhoto patientId={p.id} photoAt={p.photoAt} name={p.fullName} zoom={false} />
+                  <span>
+                    <span className="font-medium text-ink">{p.fullName}</span>
+                    <span className="block text-xs text-ink-muted">
+                      HN {p.hn}
+                      {p.citizenId ? ` · ${p.citizenId}` : ''}
+                    </span>
                   </span>
                 </span>
                 <Button size="sm" variant="secondary" onClick={() => navigate(params.get('then') === 'order' ? `/lab-orders/new?patientId=${p.id}` : `/patients/${p.id}`)}>

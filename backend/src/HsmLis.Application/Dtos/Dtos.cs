@@ -24,6 +24,7 @@ public record UserDto(
     string? Email,
     string? Phone,
     string? EmployeeCode,
+    string? LicenseNo,
     Guid? BranchId,
     UserRole Role,
     IReadOnlyList<Guid> DepartmentIds,
@@ -72,7 +73,8 @@ public record CreateUserRequest(
     [StringLength(40)] string? EmployeeCode,
     Guid? BranchId,
     UserRole Role,
-    [MaxLength(100)] List<Guid>? DepartmentIds);
+    [MaxLength(100)] List<Guid>? DepartmentIds,
+    [StringLength(40)] string? LicenseNo = null);
 
 public record UpdateUserRequest(
     [StringLength(200)] string? NewPassword,
@@ -87,7 +89,8 @@ public record UpdateUserRequest(
     Guid? BranchId,
     UserRole Role,
     [MaxLength(100)] List<Guid>? DepartmentIds,
-    bool IsActive);
+    bool IsActive,
+    [StringLength(40)] string? LicenseNo = null);
 
 public record OrganizationRequest(
     [Required, StringLength(20)] string Code,
@@ -250,7 +253,16 @@ public record PatientDto(
     string? Allergies,
     string? Conditions,
     string? Medications,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? PrefixEn,
+    string? Subdistrict,
+    string? District,
+    string? Occupation,
+    string? MaritalStatus,
+    string? CardIssuer,
+    DateOnly? CardIssueDate,
+    DateOnly? CardExpiryDate,
+    DateTime? PhotoAt);
 
 public record PatientRequest(
     [StringLength(30)] string? Prefix,
@@ -274,7 +286,22 @@ public record PatientRequest(
     [StringLength(60)] string? EmergencyRelation,
     [StringLength(500)] string? Allergies,
     [StringLength(500)] string? Conditions,
-    [StringLength(500)] string? Medications);
+    [StringLength(500)] string? Medications,
+    [StringLength(30)] string? PrefixEn = null,
+    [StringLength(80)] string? Subdistrict = null,
+    [StringLength(80)] string? District = null,
+    [StringLength(80)] string? Occupation = null,
+    [StringLength(30)] string? MaritalStatus = null,
+    [StringLength(120)] string? CardIssuer = null,
+    DateOnly? CardIssueDate = null,
+    DateOnly? CardExpiryDate = null);
+
+/// <summary>A JPEG, PNG or WebP image as base64 (a card photo is about 5 KB).</summary>
+public record PatientPhotoRequest([Required, StringLength(PatientPhotoRequest.MaxBase64)] string Data)
+{
+    public const int MaxBytes = 200_000;
+    public const int MaxBase64 = (MaxBytes + 2) / 3 * 4;
+}
 
 // ---------- orders, specimens, results ----------
 
@@ -316,7 +343,8 @@ public record OrderSummaryDto(
     bool HasCritical,
     decimal Total,
     DateTime OrderedAt,
-    DateTime? ReceivedAt);
+    DateTime? ReceivedAt,
+    DateTime? PatientPhotoAt);
 
 public record ContainerDto(
     Guid Id,
@@ -467,7 +495,8 @@ public record WorklistRowDto(
     int EnteredCount,
     int VerifiedCount,
     int ApprovedCount,
-    bool HasCritical);
+    bool HasCritical,
+    DateTime? PatientPhotoAt);
 
 public record ContainerIdsRequest([MaxLength(50)] List<Guid>? ContainerIds);
 
@@ -489,7 +518,8 @@ public record ResultInput(Guid ItemId, [StringLength(200)] string? Value, [Strin
 
 public record SaveResultsRequest(int Version, [Required, MaxLength(300)] List<ResultInput> Results);
 
-public record ResultActionRequest(int Version, [MaxLength(300)] List<Guid>? ItemIds);
+/// <summary><paramref name="LicenseNo"/> is checked only on approval: it must match the approver's registered licence.</summary>
+public record ResultActionRequest(int Version, [MaxLength(300)] List<Guid>? ItemIds, [StringLength(40)] string? LicenseNo = null);
 
 /// <summary>Takes an approved or verified result back to "entered" so it can be corrected.</summary>
 public record ReopenRequest(int Version, Guid ItemId, [Required, StringLength(300)] string Reason);

@@ -58,8 +58,8 @@ frontend/
 - **Tenancy:** every row belongs to one organization; EF query filters hide other organizations, and saving a
   row of another organization throws.
 - **Roles:** 8 roles with fixed permissions (`Domain/Permissions.cs`). Nobody can create or edit a user above their own level.
-- **Results:** entered only from a received specimen; Pending → Entered → Verified → Approved. Nobody approves a
-  result they entered or verified within the last minute. Approved results are corrected by reopening, with a reason.
+- **Results:** entered only from a received specimen; Pending → Entered → Verified → Approved. Approving needs
+  the approver's licence number and verifies any entered result in the same step. Approved results are corrected by reopening, with a reason.
   The worklist has one row per order and department, and the result screen works on one department at a time, so
   verify/approve never signs off another department's tests.
 - **Cancelling:** a whole order, or one test with a reason (not an approved one, not the last one). A cancelled test

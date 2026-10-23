@@ -162,6 +162,8 @@ public class User : IOrgOwned
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public string? EmployeeCode { get; set; }
+    /// <summary>Professional licence number; required for roles in <see cref="Permissions.NeedsLicense"/> and asked again on every approval.</summary>
+    public string? LicenseNo { get; set; }
     public Guid? BranchId { get; set; }
     public UserRole Role { get; set; }
     /// <summary>Departments whose work the user may see; empty means all of them.</summary>
@@ -304,12 +306,32 @@ public class Patient : IOrgOwned
     public string? Allergies { get; set; }
     public string? Conditions { get; set; }
     public string? Medications { get; set; }
+    public string? PrefixEn { get; set; }
+    public string? Subdistrict { get; set; }
+    public string? District { get; set; }
+    public string? Occupation { get; set; }
+    public string? MaritalStatus { get; set; }
+    /// <summary>From the Thai ID card: who issued it and its validity.</summary>
+    public string? CardIssuer { get; set; }
+    public DateOnly? CardIssueDate { get; set; }
+    public DateOnly? CardExpiryDate { get; set; }
+    /// <summary>When the photo was last set; null when there is none. Also busts the browser's image cache.</summary>
+    public DateTime? PhotoAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     /// <summary>Soft delete: hidden everywhere, kept for the records that point at it.</summary>
     public DateTime? DeletedAt { get; set; }
 
     public string FullNameTh => $"{Prefix}{FirstNameTh} {LastNameTh}".Trim();
+}
+
+/// <summary>A patient's photo, kept apart so loading a patient never loads the image.</summary>
+public class PatientPhoto : IOrgOwned
+{
+    public Guid PatientId { get; set; }
+    public Guid OrganizationId { get; set; }
+    public byte[] Data { get; set; } = [];
+    public string ContentType { get; set; } = "";
 }
 
 public class LabOrder : IOrgOwned

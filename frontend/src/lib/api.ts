@@ -2,6 +2,8 @@
 
 export type UserRole = 'SuperAdmin' | 'CompanyAdmin' | 'BranchAdmin' | 'LabManager' | 'LabTechnician' | 'Doctor' | 'Receptionist' | 'Cashier'
 export const ROLES: UserRole[] = ['SuperAdmin', 'CompanyAdmin', 'BranchAdmin', 'LabManager', 'LabTechnician', 'Doctor', 'Receptionist', 'Cashier']
+/** Medical professionals: a licence number is required (mirrors Permissions.NeedsLicense). */
+export const needsLicense = (r: UserRole) => r === 'LabManager' || r === 'LabTechnician' || r === 'Doctor'
 
 export type Permission =
   | 'dashboard'
@@ -44,6 +46,7 @@ export type User = {
   email: string | null
   phone: string | null
   employeeCode: string | null
+  licenseNo: string | null
   branchId: string | null
   role: UserRole
   departmentIds: string[]
@@ -167,8 +170,17 @@ export type Patient = {
   conditions: string | null
   medications: string | null
   createdAt: string
+  prefixEn: string | null
+  subdistrict: string | null
+  district: string | null
+  occupation: string | null
+  maritalStatus: string | null
+  cardIssuer: string | null
+  cardIssueDate: string | null
+  cardExpiryDate: string | null
+  photoAt: string | null
 }
-export type PatientInput = Omit<Patient, 'id' | 'hn' | 'fullName' | 'ageYears' | 'createdAt'>
+export type PatientInput = Omit<Patient, 'id' | 'hn' | 'fullName' | 'ageYears' | 'createdAt' | 'photoAt'>
 
 export type OrderSummary = {
   id: string
@@ -191,6 +203,7 @@ export type OrderSummary = {
   total: number
   orderedAt: string
   receivedAt: string | null
+  patientPhotoAt: string | null
 }
 
 export type Container = {
@@ -343,6 +356,7 @@ export type WorklistRow = {
   verifiedCount: number
   approvedCount: number
   hasCritical: boolean
+  patientPhotoAt: string | null
 }
 export type ResultsKpi ={ pendingEntry: number; pendingVerify: number; pendingApprove: number; criticalOpen: number }
 export type SearchResult = { orders: OrderSummary[]; matchedLsn: string | null }
@@ -507,6 +521,11 @@ export const api = {
   createPatient: (body: PatientInput) => json<Patient>('POST', '/patients', body),
   updatePatient: (id: string, body: PatientInput) => json<Patient>('PUT', `/patients/${id}`, body),
   deletePatient: (id: string) => json<void>('DELETE', `/patients/${id}`),
+  /** base64 JPEG/PNG/WebP, without the data: prefix. */
+  setPatientPhoto: (id: string, data: string) => json<Patient>('PUT', `/patients/${id}/photo`, { data }),
+  removePatientPhoto: (id: string) => json<Patient>('DELETE', `/patients/${id}/photo`),
+  /** The photo's address; photoAt is in it so a new photo is a new address. */
+  patientPhotoUrl: (id: string, photoAt: string) => url(`/patients/${id}/photo`, { v: photoAt }),
 
   orders: (query: OrderFilter & { status?: OrderStatus | ''; open?: boolean }) => json<Paged<OrderSummary>>('GET', '/orders', undefined, query),
   search: (q: string) => json<SearchResult>('GET', '/orders/search', undefined, { q }),
@@ -536,8 +555,8 @@ export const api = {
     json<ResultActionResponse>('POST', `/results/${orderId}`, { version, results }),
   verifyResults: (orderId: string, version: number, itemIds: string[] | null) =>
     json<ResultActionResponse>('POST', `/results/${orderId}/verify`, { version, itemIds }),
-  approveResults: (orderId: string, version: number, itemIds: string[] | null) =>
-    json<ResultActionResponse>('POST', `/results/${orderId}/approve`, { version, itemIds }),
+  approveResults: (orderId: string, version: number, itemIds: string[] | null, licenseNo: string) =>
+    json<ResultActionResponse>('POST', `/results/${orderId}/approve`, { version, itemIds, licenseNo }),
   reopenResult: (orderId: string, version: number, itemId: string, reason: string) =>
     json<ResultActionResponse>('POST', `/results/${orderId}/reopen`, { version, itemId, reason }),
   resultHistory: (orderId: string, itemId: string) => json<ResultEvent[]>('GET', `/results/${orderId}/items/${itemId}/history`),

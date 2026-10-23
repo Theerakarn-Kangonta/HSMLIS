@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FlagBadge } from '../../components/lab'
 import { OrderTable } from '../../components/OrderTable'
+import { PatientPhoto } from '../../components/PatientPhoto'
 import { Badge, Button, Card, CardHeader, ErrorNote, LinkButton, Modal, PageHeader, SkeletonCards, Tabs, useToast } from '../../components/ui'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { useI18n } from '../../lib/i18n'
+import { useI18n, type TKey } from '../../lib/i18n'
 
 export function PatientDetailPage() {
   const { id } = useParams()
@@ -54,7 +55,7 @@ export function PatientDetailPage() {
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="flex size-12 items-center justify-center rounded-full bg-brand-600 text-base font-semibold text-white">{`${p.firstNameTh[0] ?? ''}${p.lastNameTh[0] ?? ''}`}</span>
+            <PatientPhoto patientId={p.id} photoAt={p.photoAt} name={p.fullName} size="lg" />
             <span>
               {p.fullName}{' '}
               <Badge tone="accent">
@@ -105,6 +106,9 @@ export function PatientDetailPage() {
               [t('patient.sex'), t(`sex.${p.sex}`)],
               [t('patient.bloodGroup'), p.bloodGroup],
               [t('patient.nationality'), p.nationality],
+              [t('patient.occupation'), p.occupation],
+              [t('patient.maritalStatus'), p.maritalStatus ? t(`marital.${p.maritalStatus}` as TKey) : null],
+              [t('patients.sectionCard'), [p.cardIssuer, p.cardIssueDate && formatDate(p.cardIssueDate), p.cardExpiryDate && `→ ${formatDate(p.cardExpiryDate)}`].filter(Boolean).join(' ')],
             ])}
           </Card>
           <Card>
@@ -113,7 +117,7 @@ export function PatientDetailPage() {
               [t('patient.phone'), p.phone],
               [t('patient.email'), p.email],
               ['LINE ID', p.lineId],
-              [t('patient.address'), [p.address, p.province, p.postCode].filter(Boolean).join(' ')],
+              [t('patient.address'), [p.address, p.subdistrict, p.district, p.province, p.postCode].filter(Boolean).join(' ')],
               [t('patient.emergencyName'), [p.emergencyName, p.emergencyRelation, p.emergencyPhone].filter(Boolean).join(' · ')],
             ])}
           </Card>

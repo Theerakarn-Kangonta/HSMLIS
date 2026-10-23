@@ -20,7 +20,7 @@ public interface IResultService
 
 /// <summary>
 /// Results go Pending → Entered → Verified → Approved. Entering needs a received specimen;
-/// approving needs a verified result and, for one's own work, a minute's wait (ApprovalRule).
+/// approving needs the approver's licence number and verifies any result not yet verified.
 /// </summary>
 public class ResultService(
     ILabOrderRepository orders,
@@ -139,19 +139,26 @@ public class ResultService(
     public async Task<ResultActionResponse> ApproveAsync(Guid orderId, ResultActionRequest request, CancellationToken ct = default)
     {
         var ctx = await context.GetAsync(ct);
+        if (ctx.User.LicenseNo is null)
+            throw new BusinessRuleException("license_not_registered", "Your account has no professional licence number, so you cannot approve results.");
+        if (!string.Equals(Text.Clean(request.LicenseNo), ctx.User.LicenseNo, StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException("license_mismatch", "The licence number does not match the one registered for your account.");
         var order = await Load(orderId, request.Version, ct);
-        var targets = Targets(order, request.ItemIds, ResultStatus.Verified);
+        // Approving also verifies: the approver's licence number is their sign-off on both steps.
+        var targets = Targets(order, request.ItemIds, ResultStatus.Entered, ResultStatus.Verified);
         if (targets.Count == 0)
-            throw new BusinessRuleException("nothing_to_approve", "There are no verified results to approve.");
+            throw new BusinessRuleException("nothing_to_approve", "There are no entered results to approve.");
 
-        var allowed = targets.Where(i => !ApprovalRule.Blocks(ctx.User.Id, i, ctx.Now)).ToList();
-        var waiting = targets.Count - allowed.Count;
-        if (allowed.Count == 0)
-            throw new BusinessRuleException("self_approval_wait",
-                $"{waiting} result(s) were entered or verified by you in the last minute. Wait a minute or ask a colleague to approve.");
-
-        foreach (var item in allowed)
+        foreach (var item in targets)
         {
+            if (item.ResultStatus == ResultStatus.Entered)
+            {
+                item.VerifiedAt = ctx.Now;
+                item.VerifiedById = ctx.User.Id;
+                item.VerifiedByName = ctx.UserName;
+                // 1 µs (Postgres's precision) earlier, so history always lists verify before approve.
+                AddEvent(ctx, item, "verify", ctx.Now.AddTicks(-10));
+            }
             item.ResultStatus = ResultStatus.Approved;
             item.ApprovedAt = ctx.Now;
             item.ApprovedById = ctx.User.Id;
@@ -159,9 +166,9 @@ public class ResultService(
             AddEvent(ctx, item, "approve");
         }
         OrderState.Refresh(order, ctx.Now);
-        audit.Write(ctx, "result.approve", "order", order.Id.ToString(), $"{order.OrderNo}: {allowed.Count} result(s)");
+        audit.Write(ctx, "result.approve", "order", order.Id.ToString(), $"{order.OrderNo}: {targets.Count} result(s)");
         await unitOfWork.SaveChangesAsync(ct);
-        return await Respond(order, ctx, allowed.Count, waiting, waiting > 0 ? "self_approval_wait" : null, ct);
+        return await Respond(order, ctx, targets.Count, 0, null, ct);
     }
 
     public async Task<ResultActionResponse> ReopenAsync(Guid orderId, ReopenRequest request, CancellationToken ct = default)
@@ -216,10 +223,10 @@ public class ResultService(
     private static OrderItem FindItem(LabOrder order, Guid itemId) =>
         order.Items.FirstOrDefault(i => i.Id == itemId) ?? throw new NotFoundException("result_not_found", "Result not found.");
 
-    private static List<OrderItem> Targets(LabOrder order, List<Guid>? ids, ResultStatus status) =>
+    private static List<OrderItem> Targets(LabOrder order, List<Guid>? ids, params ResultStatus[] statuses) =>
         ids is { Count: > 0 }
-            ? ids.Distinct().Select(id => FindItem(order, id)).Where(i => i.ResultStatus == status).ToList()
-            : order.Items.Where(i => i.ResultStatus == status).ToList();
+            ? ids.Distinct().Select(id => FindItem(order, id)).Where(i => statuses.Contains(i.ResultStatus)).ToList()
+            : order.Items.Where(i => statuses.Contains(i.ResultStatus)).ToList();
 
     private static void ClearResult(OrderItem item)
     {
@@ -236,7 +243,7 @@ public class ResultService(
         item.VerifiedByName = null;
     }
 
-    private void AddEvent(OrgContext ctx, OrderItem item, string action) => orders.AddEvent(new ResultEvent
+    private void AddEvent(OrgContext ctx, OrderItem item, string action, DateTime? at = null) => orders.AddEvent(new ResultEvent
     {
         Id = Guid.NewGuid(),
         OrganizationId = ctx.Org.Id,
@@ -246,7 +253,7 @@ public class ResultService(
         Flag = item.Flag,
         UserId = ctx.User.Id,
         UserName = ctx.UserName,
-        At = ctx.Now,
+        At = at ?? ctx.Now,
     });
 
     private async Task<ResultActionResponse> Respond(LabOrder order, OrgContext ctx, int done, int skipped, string? reason, CancellationToken ct)

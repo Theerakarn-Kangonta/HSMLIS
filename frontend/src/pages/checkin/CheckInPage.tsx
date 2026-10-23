@@ -30,6 +30,7 @@ import {
 } from '../../components/ui'
 import { api, type CheckInTab, type OrderDetail, type OrderSummary } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
+import { PatientPhoto } from '../../components/PatientPhoto'
 
 const TABS: CheckInTab[] = ['Collect', 'Receive', 'Received', 'Rejected']
 
@@ -188,7 +189,10 @@ export function CheckInPage() {
                     ) : null}
                   </td>
                   <td className={tdClass} data-label={t('patient.name')}>
-                    {o.patientName}
+                    <span className="flex items-center gap-2">
+                      <PatientPhoto patientId={o.patientId} photoAt={o.patientPhotoAt} name={o.patientName} />
+                      {o.patientName}
+                    </span>
                   </td>
                   <td className={`${tdClass} font-mono`} data-label="HN">
                     {o.hn}

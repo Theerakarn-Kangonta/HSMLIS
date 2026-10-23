@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { PatientPhoto } from '../../components/PatientPhoto'
 import { Plus, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -56,7 +57,10 @@ export function PatientsPage() {
                     {p.hn}
                   </td>
                   <td className={tdClass} data-label={t('patient.name')}>
-                    {p.fullName}
+                    <span className="flex items-center gap-2">
+                      <PatientPhoto patientId={p.id} photoAt={p.photoAt} name={p.fullName} />
+                      {p.fullName}
+                    </span>
                   </td>
                   <td className={`${tdClass} font-mono text-ink-muted`} data-label={t('patient.citizenId')}>
                     {p.citizenId ?? '–'}

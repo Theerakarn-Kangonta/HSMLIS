@@ -4,6 +4,7 @@ import type { OrderSummary } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { OrderStatusBadge, UrgentBadge } from './lab'
 import { Badge, DataTable, ProgressBar, SkeletonRows, tableBodyClass, tableHeadClass, tableRowClass, tdClass, thClass } from './ui'
+import { PatientPhoto } from './PatientPhoto'
 
 /** The orders list used by search, orders and the patient's history. Clicking a row opens the order. */
 export function OrderTable({ orders, loading, progress = 'approved', actions, link = (o) => `/lab-orders/${o.id}` }: {
@@ -47,7 +48,10 @@ export function OrderTable({ orders, loading, progress = 'approved', actions, li
                 {o.hn}
               </td>
               <td className={tdClass} data-label={t('patient.name')}>
-                {o.patientName}
+                <span className="flex items-center gap-2">
+                  <PatientPhoto patientId={o.patientId} photoAt={o.patientPhotoAt} name={o.patientName} />
+                  {o.patientName}
+                </span>
               </td>
               <td className={`${tdClass} max-w-48 truncate text-ink-muted`} data-label={t('order.referrer')}>
                 {o.referrerName ?? '–'}

@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser c
     public DbSet<TestPackage> TestPackages => Set<TestPackage>();
     public DbSet<ReferringOrganization> Referrers => Set<ReferringOrganization>();
     public DbSet<Patient> Patients => Set<Patient>();
+    public DbSet<PatientPhoto> PatientPhotos => Set<PatientPhoto>();
     public DbSet<LabOrder> LabOrders => Set<LabOrder>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<SpecimenContainer> Containers => Set<SpecimenContainer>();
@@ -124,6 +125,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser c
             e.Property(x => x.Email).HasMaxLength(254);
             e.Property(x => x.Phone).HasMaxLength(40);
             e.Property(x => x.EmployeeCode).HasMaxLength(40);
+            e.Property(x => x.LicenseNo).HasMaxLength(40);
             e.HasIndex(x => x.Username).IsUnique();
             e.HasOne<Branch>().WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             e.Ignore(x => x.FullName);
@@ -212,12 +214,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser c
             e.Property(x => x.Allergies).HasMaxLength(500);
             e.Property(x => x.Conditions).HasMaxLength(500);
             e.Property(x => x.Medications).HasMaxLength(500);
+            e.Property(x => x.PrefixEn).HasMaxLength(30);
+            e.Property(x => x.Subdistrict).HasMaxLength(80);
+            e.Property(x => x.District).HasMaxLength(80);
+            e.Property(x => x.Occupation).HasMaxLength(80);
+            e.Property(x => x.MaritalStatus).HasMaxLength(30);
+            e.Property(x => x.CardIssuer).HasMaxLength(120);
             e.Ignore(x => x.FullNameTh);
             e.HasIndex(x => new { x.OrganizationId, x.Hn }).IsUnique();
             e.HasIndex(x => new { x.OrganizationId, x.CitizenId });
             e.HasIndex(x => new { x.OrganizationId, x.CreatedAt });
             // Soft-deleted patients stay visible to the records that point at them; the
             // repository hides them from searches and lists.
+            OwnedByOrganization(e);
+        });
+
+        b.Entity<PatientPhoto>(e =>
+        {
+            e.HasKey(x => x.PatientId);
+            e.Property(x => x.ContentType).HasMaxLength(20);
+            e.HasOne<Patient>().WithOne().HasForeignKey<PatientPhoto>(x => x.PatientId).OnDelete(DeleteBehavior.Cascade);
             OwnedByOrganization(e);
         });
 

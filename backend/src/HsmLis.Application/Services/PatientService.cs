@@ -16,6 +16,9 @@ public interface IPatientService
     Task<PatientDto> UpdateAsync(Guid id, PatientRequest request, CancellationToken ct = default);
     Task DeleteAsync(Guid id, CancellationToken ct = default);
     Task<List<OrderSummaryDto>> OrdersAsync(Guid id, CancellationToken ct = default);
+    Task<PatientPhoto> GetPhotoAsync(Guid id, CancellationToken ct = default);
+    Task<PatientDto> SetPhotoAsync(Guid id, PatientPhotoRequest request, CancellationToken ct = default);
+    Task<PatientDto> RemovePhotoAsync(Guid id, CancellationToken ct = default);
 }
 
 public class PatientService(
@@ -107,6 +110,61 @@ public class PatientService(
         return await orders.ForPatientAsync(id, ct);
     }
 
+    public async Task<PatientPhoto> GetPhotoAsync(Guid id, CancellationToken ct = default)
+    {
+        await Find(id, ct);
+        return await patients.GetPhotoAsync(id, ct) ?? throw new NotFoundException("photo_not_found", "This patient has no photo.");
+    }
+
+    public async Task<PatientDto> SetPhotoAsync(Guid id, PatientPhotoRequest request, CancellationToken ct = default)
+    {
+        var ctx = await context.GetAsync(ct);
+        var patient = await Find(id, ct);
+        var data = new byte[request.Data.Length];
+        if (!Convert.TryFromBase64String(request.Data, data, out var length) || length == 0)
+            throw new BusinessRuleException("photo_invalid", "The photo is not a valid image.");
+        data = data[..length];
+        if (data.Length > PatientPhotoRequest.MaxBytes)
+            throw new BusinessRuleException("photo_too_large", "The photo is too large.");
+        // The type comes from the bytes, never from the client, so nothing but an image is ever served back.
+        var type = ImageType(data) ?? throw new BusinessRuleException("photo_invalid", "The photo must be a JPEG, PNG or WebP image.");
+
+        var photo = await patients.GetPhotoAsync(id, ct);
+        if (photo is null)
+        {
+            photo = new PatientPhoto { PatientId = id, OrganizationId = ctx.Org.Id };
+            patients.AddPhoto(photo);
+        }
+        photo.Data = data;
+        photo.ContentType = type;
+        patient.PhotoAt = ctx.Now;
+        patient.UpdatedAt = ctx.Now;
+        audit.Write(ctx, "patient.photo", "patient", patient.Id.ToString(), patient.Hn);
+        await unitOfWork.SaveChangesAsync(ct);
+        return patient.ToDto(ctx.Today);
+    }
+
+    public async Task<PatientDto> RemovePhotoAsync(Guid id, CancellationToken ct = default)
+    {
+        var ctx = await context.GetAsync(ct);
+        var patient = await Find(id, ct);
+        if (await patients.GetPhotoAsync(id, ct) is { } photo)
+        {
+            patients.RemovePhoto(photo);
+            patient.PhotoAt = null;
+            patient.UpdatedAt = ctx.Now;
+            audit.Write(ctx, "patient.photo_remove", "patient", patient.Id.ToString(), patient.Hn);
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+        return patient.ToDto(ctx.Today);
+    }
+
+    private static string? ImageType(byte[] d) =>
+        d is [0xFF, 0xD8, 0xFF, ..] ? "image/jpeg"
+        : d is [0x89, 0x50, 0x4E, 0x47, ..] ? "image/png"
+        : d.Length > 12 && d[..4].SequenceEqual("RIFF"u8.ToArray()) && d[8..12].SequenceEqual("WEBP"u8.ToArray()) ? "image/webp"
+        : null;
+
     private async Task<Patient> Find(Guid id, CancellationToken ct) =>
         await patients.GetAsync(id, ct) ?? throw new NotFoundException("patient_not_found", "Patient not found.");
 
@@ -122,6 +180,8 @@ public class PatientService(
             throw new BusinessRuleException("birth_date_future", "The date of birth is in the future.");
         if (Text.Clean(r.CitizenId) is { } id && !ThaiCitizenId.IsValid(id))
             throw new BusinessRuleException("citizen_id_invalid", "The citizen ID's check digit is wrong.");
+        if (r.CardExpiryDate < r.CardIssueDate)
+            throw new BusinessRuleException("card_dates_invalid", "The ID card expires before it was issued.");
     }
 
     private static void Apply(Patient p, PatientRequest r, DateTime now)
@@ -148,6 +208,14 @@ public class PatientService(
         p.Allergies = Text.Clean(r.Allergies);
         p.Conditions = Text.Clean(r.Conditions);
         p.Medications = Text.Clean(r.Medications);
+        p.PrefixEn = Text.Clean(r.PrefixEn);
+        p.Subdistrict = Text.Clean(r.Subdistrict);
+        p.District = Text.Clean(r.District);
+        p.Occupation = Text.Clean(r.Occupation);
+        p.MaritalStatus = Text.Clean(r.MaritalStatus);
+        p.CardIssuer = Text.Clean(r.CardIssuer);
+        p.CardIssueDate = r.CardIssueDate;
+        p.CardExpiryDate = r.CardExpiryDate;
         p.UpdatedAt = now;
     }
 }

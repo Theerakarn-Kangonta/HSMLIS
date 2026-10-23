@@ -83,16 +83,6 @@ public class WorkflowRulesTests
     private static readonly DateTime Now = new(2026, 9, 21, 10, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void Own_work_cannot_be_approved_within_a_minute()
-    {
-        var me = Guid.NewGuid();
-        var item = new OrderItem { EnteredById = me, EnteredAt = Now.AddSeconds(-30), VerifiedById = me, VerifiedAt = Now.AddSeconds(-20) };
-        Assert.True(ApprovalRule.Blocks(me, item, Now));
-        Assert.False(ApprovalRule.Blocks(Guid.NewGuid(), item, Now));
-        Assert.False(ApprovalRule.Blocks(me, item, Now.AddMinutes(2)));
-    }
-
-    [Fact]
     public void Order_status_follows_specimens_and_results()
     {
         Assert.Equal(OrderStatus.AwaitingCollection, OrderRules.StatusOf(false, [ContainerStatus.Pending], [ResultStatus.Pending]));
@@ -167,7 +157,7 @@ public class WorkflowRulesTests
     public void Permissions_keep_admins_above_staff()
     {
         Assert.True(Permissions.Has(UserRole.LabTechnician, Permissions.ResultsVerify));
-        Assert.False(Permissions.Has(UserRole.LabTechnician, Permissions.ResultsApprove));
+        Assert.True(Permissions.Has(UserRole.LabTechnician, Permissions.ResultsApprove));
         Assert.False(Permissions.Has(UserRole.Cashier, Permissions.Orders));
         Assert.False(Permissions.CanManage(UserRole.BranchAdmin, UserRole.SuperAdmin));
         Assert.True(Permissions.CanManage(UserRole.BranchAdmin, UserRole.LabTechnician));

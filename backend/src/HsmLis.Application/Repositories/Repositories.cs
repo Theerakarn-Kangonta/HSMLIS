@@ -64,6 +64,9 @@ public interface IPatientRepository
     /// <summary>Whether the patient has an order that is neither completed nor cancelled.</summary>
     Task<bool> HasOpenOrdersAsync(Guid patientId, CancellationToken ct = default);
     void Add(Patient patient);
+    Task<PatientPhoto?> GetPhotoAsync(Guid patientId, CancellationToken ct = default);
+    void AddPhoto(PatientPhoto photo);
+    void RemovePhoto(PatientPhoto photo);
 }
 
 /// <summary>An order reduced to what the dashboard's figures need.</summary>

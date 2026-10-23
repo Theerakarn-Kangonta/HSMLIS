@@ -27,7 +27,7 @@ import {
   thClass,
   useToast,
 } from '../../components/ui'
-import { api, ROLES, type User, type UserRole } from '../../lib/api'
+import { api, needsLicense, ROLES, type User, type UserRole } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useBranches, useDepartments } from '../../lib/catalog'
 import { useI18n } from '../../lib/i18n'
@@ -45,6 +45,7 @@ type Form = {
   email: string
   phone: string
   employeeCode: string
+  licenseNo: string
   branchId: string
   role: UserRole
   departmentIds: string[]
@@ -150,6 +151,7 @@ function UserDialog({ user, myLevel, onClose }: { user: User | null; myLevel: nu
     email: user?.email ?? '',
     phone: user?.phone ?? '',
     employeeCode: user?.employeeCode ?? '',
+    licenseNo: user?.licenseNo ?? '',
     branchId: user?.branchId ?? '',
     role: user?.role ?? 'LabTechnician',
     departmentIds: user?.departmentIds ?? [],
@@ -170,6 +172,7 @@ function UserDialog({ user, myLevel, onClose }: { user: User | null; myLevel: nu
         email: n(f.email),
         phone: n(f.phone),
         employeeCode: n(f.employeeCode),
+        licenseNo: n(f.licenseNo),
         branchId: f.branchId || null,
         role: f.role,
         departmentIds: f.departmentIds,
@@ -220,6 +223,9 @@ function UserDialog({ user, myLevel, onClose }: { user: User | null; myLevel: nu
           </Field>
           <Field label={t('users.employeeCode')}>
             <Input value={f.employeeCode} onChange={(e) => set({ employeeCode: e.target.value })} maxLength={40} />
+          </Field>
+          <Field label={t('users.licenseNo')} hint={needsLicense(f.role) ? t('users.licenseNoHint') : undefined}>
+            <Input value={f.licenseNo} onChange={(e) => set({ licenseNo: e.target.value })} required={needsLicense(f.role)} maxLength={40} autoComplete="off" />
           </Field>
           <Field label={t('patient.email')}>
             <Input type="email" value={f.email} onChange={(e) => set({ email: e.target.value })} maxLength={254} />

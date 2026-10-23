@@ -141,19 +141,6 @@ public static class ResultRules
     }
 }
 
-/// <summary>
-/// Separation of duties: nobody approves a result they entered or verified themselves within the
-/// last minute. They must wait, so the approval is a deliberate second look, or ask a colleague.
-/// </summary>
-public static class ApprovalRule
-{
-    public static readonly TimeSpan SelfApprovalWait = TimeSpan.FromMinutes(1);
-
-    public static bool Blocks(Guid approverId, OrderItem item, DateTime now) =>
-        (item.EnteredById == approverId && item.EnteredAt > now - SelfApprovalWait)
-        || (item.VerifiedById == approverId && item.VerifiedAt > now - SelfApprovalWait);
-}
-
 public static class OrderRules
 {
     /// <summary>The order's status, derived from its specimens and results.</summary>

@@ -3,6 +3,7 @@ import { Ban, CircleCheck, ClipboardPen, CreditCard, FileText, FlaskConical, Pri
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ContainerStatusBadge, FlagBadge, OrderStatusBadge, ResultStatusBadge, UrgentBadge } from '../../components/lab'
+import { PatientPhoto } from '../../components/PatientPhoto'
 import { CollectDialog, ReceiveDialog, RejectDialog } from '../../components/SpecimenDialogs'
 import {
   Badge,
@@ -150,36 +151,39 @@ export function OrderDetailPage() {
                   {t('order.viewPatient')}
                 </Link>
               </CardHeader>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 p-5 text-sm">
-                <dt className="text-ink-muted">HN</dt>
-                <dd className="font-mono text-ink">{o.patient.hn}</dd>
-                <dt className="text-ink-muted">{t('patient.name')}</dt>
-                <dd className="font-medium text-ink">{o.patient.fullName}</dd>
-                <dt className="text-ink-muted">{t('patient.sexAge')}</dt>
-                <dd className="text-ink">
-                  {t(`sex.${o.patient.sex}`)}
-                  {o.patient.ageYears !== null ? ` · ${t('patient.ageYears', { n: o.patient.ageYears })}` : ''}
-                </dd>
-                <dt className="text-ink-muted">{t('order.vitals')}</dt>
-                <dd className="text-ink">
-                  {[
-                    o.bpSystolic && o.bpDiastolic ? `BP ${o.bpSystolic}/${o.bpDiastolic}` : null,
-                    o.heartRate ? `HR ${o.heartRate}` : null,
-                    o.temperatureC ? `${formatNumber(o.temperatureC)} °C` : null,
-                    o.weightKg ? `${formatNumber(o.weightKg)} kg` : null,
-                    o.heightCm ? `${formatNumber(o.heightCm)} cm` : null,
-                    o.bmi ? `BMI ${formatNumber(o.bmi)}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || '–'}
-                </dd>
-                {o.patient.allergies ? (
-                  <>
-                    <dt className="text-red-700">{t('patient.allergies')}</dt>
-                    <dd className="font-medium text-red-700">{o.patient.allergies}</dd>
-                  </>
-                ) : null}
-              </dl>
+              <div className="flex gap-5 p-5">
+                <PatientPhoto patientId={o.patient.id} photoAt={o.patient.photoAt} name={o.patient.fullName} size="lg" />
+                <dl className="grid flex-1 grid-cols-[auto_1fr] content-start gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-ink-muted">HN</dt>
+                  <dd className="font-mono text-ink">{o.patient.hn}</dd>
+                  <dt className="text-ink-muted">{t('patient.name')}</dt>
+                  <dd className="font-medium text-ink">{o.patient.fullName}</dd>
+                  <dt className="text-ink-muted">{t('patient.sexAge')}</dt>
+                  <dd className="text-ink">
+                    {t(`sex.${o.patient.sex}`)}
+                    {o.patient.ageYears !== null ? ` · ${t('patient.ageYears', { n: o.patient.ageYears })}` : ''}
+                  </dd>
+                  <dt className="text-ink-muted">{t('order.vitals')}</dt>
+                  <dd className="text-ink">
+                    {[
+                      o.bpSystolic && o.bpDiastolic ? `BP ${o.bpSystolic}/${o.bpDiastolic}` : null,
+                      o.heartRate ? `HR ${o.heartRate}` : null,
+                      o.temperatureC ? `${formatNumber(o.temperatureC)} °C` : null,
+                      o.weightKg ? `${formatNumber(o.weightKg)} kg` : null,
+                      o.heightCm ? `${formatNumber(o.heightCm)} cm` : null,
+                      o.bmi ? `BMI ${formatNumber(o.bmi)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || '–'}
+                  </dd>
+                  {o.patient.allergies ? (
+                    <>
+                      <dt className="text-red-700">{t('patient.allergies')}</dt>
+                      <dd className="font-medium text-red-700">{o.patient.allergies}</dd>
+                    </>
+                  ) : null}
+                </dl>
+              </div>
             </Card>
           </div>
 

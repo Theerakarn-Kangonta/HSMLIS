@@ -275,6 +275,13 @@ public class PatientRepository(AppDbContext db) : IPatientRepository
         db.LabOrders.AnyAsync(o => o.PatientId == patientId && (o.Status == OrderStatus.AwaitingCollection || o.Status == OrderStatus.InProgress), ct);
 
     public void Add(Patient patient) => db.Patients.Add(patient);
+
+    public Task<PatientPhoto?> GetPhotoAsync(Guid patientId, CancellationToken ct = default) =>
+        db.PatientPhotos.FirstOrDefaultAsync(p => p.PatientId == patientId, ct);
+
+    public void AddPhoto(PatientPhoto photo) => db.PatientPhotos.Add(photo);
+
+    public void RemovePhoto(PatientPhoto photo) => db.PatientPhotos.Remove(photo);
 }
 
 public class LabOrderRepository(AppDbContext db) : ILabOrderRepository
@@ -346,6 +353,7 @@ public class LabOrderRepository(AppDbContext db) : ILabOrderRepository
                 o.Urgent,
                 o.OrderedAt,
                 o.ReceivedAt,
+                o.Patient.PhotoAt,
             })
             .ToDictionaryAsync(o => o.Id, ct);
         var counts = await db.OrderItems.AsNoTracking()
@@ -373,7 +381,7 @@ public class LabOrderRepository(AppDbContext db) : ILabOrderRepository
             return new WorklistRowDto(
                 o.Id, o.OrderNo, o.PatientId, o.Hn, o.PatientName, o.ReferrerName, o.Status, o.Urgent, o.OrderedAt, o.ReceivedAt,
                 k.DepartmentId, dep?.NameEn ?? "", dep?.Color ?? "#64748b",
-                c?.Items ?? 0, c?.Entered ?? 0, c?.Verified ?? 0, c?.Approved ?? 0, (c?.Critical ?? 0) > 0);
+                c?.Items ?? 0, c?.Entered ?? 0, c?.Verified ?? 0, c?.Approved ?? 0, (c?.Critical ?? 0) > 0, o.PhotoAt);
         }).ToList();
         return new PagedResult<WorklistRowDto>(rows, total, page.Page, page.PageSize);
     }
@@ -525,7 +533,8 @@ public class LabOrderRepository(AppDbContext db) : ILabOrderRepository
         o.Items.Any(i => i.Flag == ResultFlag.CriticalLow || i.Flag == ResultFlag.CriticalHigh),
         o.Total,
         o.OrderedAt,
-        o.ReceivedAt));
+        o.ReceivedAt,
+        o.Patient.PhotoAt));
 }
 
 public class InvoiceRepository(AppDbContext db) : IInvoiceRepository

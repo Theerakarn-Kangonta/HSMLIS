@@ -843,6 +843,19 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(5)")
                         .HasColumnName("blood_group");
 
+                    b.Property<DateOnly?>("CardExpiryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("card_expiry_date");
+
+                    b.Property<DateOnly?>("CardIssueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("card_issue_date");
+
+                    b.Property<string>("CardIssuer")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("card_issuer");
+
                     b.Property<string>("CitizenId")
                         .HasMaxLength(13)
                         .HasColumnType("character varying(13)")
@@ -860,6 +873,11 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<string>("District")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("district");
 
                     b.Property<string>("Email")
                         .HasMaxLength(254)
@@ -914,6 +932,11 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(60)")
                         .HasColumnName("line_id");
 
+                    b.Property<string>("MaritalStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("marital_status");
+
                     b.Property<string>("Medications")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -924,6 +947,11 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(60)")
                         .HasColumnName("nationality");
 
+                    b.Property<string>("Occupation")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("occupation");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid")
                         .HasColumnName("organization_id");
@@ -932,6 +960,10 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("phone");
+
+                    b.Property<DateTime?>("PhotoAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("photo_at");
 
                     b.Property<string>("PostCode")
                         .HasMaxLength(10)
@@ -943,6 +975,11 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("prefix");
 
+                    b.Property<string>("PrefixEn")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("prefix_en");
+
                     b.Property<string>("Province")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
@@ -953,6 +990,11 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("sex");
+
+                    b.Property<string>("Subdistrict")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("subdistrict");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -972,6 +1014,36 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_patients_organization_id_hn");
 
                     b.ToTable("patients", "hsmlis");
+                });
+
+            modelBuilder.Entity("HsmLis.Domain.Entities.PatientPhoto", b =>
+                {
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("content_type");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("data");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.HasKey("PatientId")
+                        .HasName("pk_patient_photos");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("ix_patient_photos_organization_id");
+
+                    b.ToTable("patient_photos", "hsmlis");
                 });
 
             modelBuilder.Entity("HsmLis.Domain.Entities.Payment", b =>
@@ -1439,6 +1511,11 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("last_name_th");
 
+                    b.Property<string>("LicenseNo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("license_no");
+
                     b.Property<DateTime?>("LockedUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
@@ -1733,6 +1810,23 @@ namespace HsmLis.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_patients_organizations_organization_id");
+                });
+
+            modelBuilder.Entity("HsmLis.Domain.Entities.PatientPhoto", b =>
+                {
+                    b.HasOne("HsmLis.Domain.Entities.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_photos_organizations_organization_id");
+
+                    b.HasOne("HsmLis.Domain.Entities.Patient", null)
+                        .WithOne()
+                        .HasForeignKey("HsmLis.Domain.Entities.PatientPhoto", "PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_photos_patients_patient_id");
                 });
 
             modelBuilder.Entity("HsmLis.Domain.Entities.Payment", b =>

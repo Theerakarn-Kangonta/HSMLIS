@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using HsmLis.Application.Common;
 using HsmLis.Application.Dtos;
+using HsmLis.Domain;
 using HsmLis.Domain.Entities;
 using HsmLis.Infrastructure.Persistence;
 using System.Threading.Channels;
@@ -109,6 +110,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
                 FirstNameTh = role.ToString(),
                 LastNameTh = $"{n}",
                 Role = role,
+                LicenseNo = Permissions.NeedsLicense(role) ? LicenseOf(org.Code, role) : null,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
             });
@@ -116,6 +118,8 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         await db.SaveChangesAsync();
         return new Lab(org.Id, org.Code, names);
     }
+
+    private static string LicenseOf(string labCode, UserRole role) => $"L-{role}-{labCode}";
 
     private async Task<HttpClient> SignInAsync(Lab lab, UserRole role)
     {
@@ -172,7 +176,8 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var client = await SignInAsync(lab, UserRole.LabTechnician);
         var me = await Read<MeResponse>(await client.GetAsync("/api/auth/me"));
         Assert.Contains("results.verify", me.Permissions);
-        Assert.DoesNotContain("results.approve", me.Permissions);
+        Assert.Contains("results.approve", me.Permissions);
+        Assert.DoesNotContain("settings.admin", me.Permissions);
     }
 
     [Fact]
@@ -229,6 +234,10 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var weak = await branchAdmin.PostAsJsonAsync("/api/users", new CreateUserRequest(
             $"weak{lab.Code}", "short", "อ่อน", "แอ", null, null, null, null, null, null, null, UserRole.Receptionist, null), Json);
         Assert.Equal("password_too_short", await ErrorCode(weak));
+
+        var unlicensed = await branchAdmin.PostAsJsonAsync("/api/users", new CreateUserRequest(
+            $"tech{lab.Code}", Password, "เทค", "นิค", null, null, null, null, null, null, null, UserRole.LabTechnician, null), Json);
+        Assert.Equal("license_required", await ErrorCode(unlicensed));
     }
 
     [Fact]
@@ -403,13 +412,16 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var verified = await Post<ResultActionResponse>(manager, $"/api/results/{order.Id}/verify", new ResultActionRequest(saved.Order.Version, null));
         Assert.Equal(2, verified.Done);
 
-        // The person who entered and verified must wait before approving their own work...
-        var own = await manager.PostAsJsonAsync($"/api/results/{order.Id}/approve", new ResultActionRequest(verified.Order.Version, null), Json);
-        Assert.Equal("self_approval_wait", await ErrorCode(own));
-
-        // ...a colleague need not.
+        // Approving needs the approver's own registered licence number every time.
         var doctor = await SignInAsync(lab, UserRole.Doctor);
-        var approved = await Post<ResultActionResponse>(doctor, $"/api/results/{order.Id}/approve", new ResultActionRequest(verified.Order.Version, null));
+        var approveUrl = $"/api/results/{order.Id}/approve";
+        Assert.Equal("license_mismatch", await ErrorCode(await doctor.PostAsJsonAsync(approveUrl, new ResultActionRequest(verified.Order.Version, null), Json)));
+        Assert.Equal("license_mismatch", await ErrorCode(await doctor.PostAsJsonAsync(approveUrl,
+            new ResultActionRequest(verified.Order.Version, null, LicenseOf(lab.Code, UserRole.LabManager)), Json)));
+        Assert.Equal("license_not_registered", await ErrorCode(await admin.PostAsJsonAsync(approveUrl,
+            new ResultActionRequest(verified.Order.Version, null, "anything"), Json)));
+        var approved = await Post<ResultActionResponse>(doctor, approveUrl,
+            new ResultActionRequest(verified.Order.Version, null, $" {LicenseOf(lab.Code, UserRole.Doctor).ToLowerInvariant()} "));
         Assert.Equal(2, approved.Done);
         Assert.Equal(OrderStatus.Completed, approved.Order.Status);
         Assert.NotNull(approved.Order.CompletedAt);
@@ -417,10 +429,10 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var history = await Read<List<ResultEventDto>>(await doctor.GetAsync($"/api/results/{order.Id}/items/{glu.Id}/history"));
         Assert.Equal(["approve", "verify", "enter"], history.Select(h => h.Action));
 
-        // A technician may not approve at all.
-        var tech = await SignInAsync(lab, UserRole.LabTechnician);
+        // A receptionist may not approve at all.
+        var receptionist = await SignInAsync(lab, UserRole.Receptionist);
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await tech.PostAsJsonAsync($"/api/results/{order.Id}/approve", new ResultActionRequest(approved.Order.Version, null), Json)).StatusCode);
+            (await receptionist.PostAsJsonAsync($"/api/results/{order.Id}/approve", new ResultActionRequest(approved.Order.Version, null), Json)).StatusCode);
 
         // Payment, in two parts.
         var cashier = await SignInAsync(lab, UserRole.Cashier);
@@ -535,6 +547,28 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task A_technologist_approves_their_own_entered_results_in_one_step()
+    {
+        var lab = await NewLabAsync();
+        var admin = await SignInAsync(lab, UserRole.SuperAdmin);
+        var (glucose, _) = await CatalogAsync(admin);
+        var patient = await Post<PatientDto>(admin, "/api/patients", NewPatient("อนุมัติเอง"));
+        var order = await Post<OrderDetailDto>(admin, "/api/orders", new CreateOrderRequest(
+            patient.Id, null, null, null, false, null, null, null, null, null, null, null, null, null, [glucose.Id], 0));
+        order = await Post<OrderDetailDto>(admin, $"/api/checkin/{order.Id}/receive", new ReceiveRequest(null, null, null, null));
+
+        var tech = await SignInAsync(lab, UserRole.LabTechnician);
+        var saved = await Post<ResultActionResponse>(tech, $"/api/results/{order.Id}", new SaveResultsRequest(order.Version, [new ResultInput(order.Items[0].Id, "90", null)]));
+        var approved = await Post<ResultActionResponse>(tech, $"/api/results/{order.Id}/approve",
+            new ResultActionRequest(saved.Order.Version, null, LicenseOf(lab.Code, UserRole.LabTechnician)));
+
+        Assert.Equal(1, approved.Done);
+        Assert.Equal(OrderStatus.Completed, approved.Order.Status);
+        var history = await Read<List<ResultEventDto>>(await tech.GetAsync($"/api/results/{order.Id}/items/{order.Items[0].Id}/history"));
+        Assert.Equal(["approve", "verify", "enter"], history.Select(h => h.Action));
+    }
+
+    [Fact]
     public async Task The_result_screen_shows_the_patients_earlier_results()
     {
         var lab = await NewLabAsync();
@@ -551,7 +585,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
             o = await Post<OrderDetailDto>(admin, $"/api/checkin/{o.Id}/receive", new ReceiveRequest(null, null, null, null));
             var saved = await Post<ResultActionResponse>(manager, $"/api/results/{o.Id}", new SaveResultsRequest(o.Version, [new ResultInput(o.Items[0].Id, value, null)]));
             var verified = await Post<ResultActionResponse>(manager, $"/api/results/{o.Id}/verify", new ResultActionRequest(saved.Order.Version, null));
-            return (await Post<ResultActionResponse>(doctor, $"/api/results/{o.Id}/approve", new ResultActionRequest(verified.Order.Version, null))).Order;
+            return (await Post<ResultActionResponse>(doctor, $"/api/results/{o.Id}/approve", new ResultActionRequest(verified.Order.Version, null, LicenseOf(lab.Code, UserRole.Doctor)))).Order;
         }
 
         var first = await ApprovedGlucose("90");
@@ -571,6 +605,52 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Forbidden, (await cashier.GetAsync($"/api/results/{current.Id}/previous")).StatusCode);
         var otherLab = await SignInAsync(await NewLabAsync(), UserRole.SuperAdmin);
         Assert.Equal(HttpStatusCode.NotFound, (await otherLab.GetAsync($"/api/results/{current.Id}/previous")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Patients_keep_their_id_card_details()
+    {
+        var lab = await NewLabAsync();
+        var reception = await SignInAsync(lab, UserRole.Receptionist);
+        var request = NewPatient("บัตร") with
+        {
+            PrefixEn = "Mr.", Subdistrict = "บางรัก", District = "บางรัก", Occupation = "ครู", MaritalStatus = "สมรส",
+            CardIssuer = "เขตบางรัก", CardIssueDate = new DateOnly(2020, 1, 1), CardExpiryDate = new DateOnly(2028, 1, 1),
+        };
+        var saved = await Post<PatientDto>(reception, "/api/patients", request);
+        Assert.Equal(("Mr.", "บางรัก", "เขตบางรัก", new DateOnly(2028, 1, 1)), (saved.PrefixEn, saved.District, saved.CardIssuer, saved.CardExpiryDate));
+
+        var backwards = await reception.PostAsJsonAsync("/api/patients", request with { CardExpiryDate = new DateOnly(2019, 1, 1) }, Json);
+        Assert.Equal("card_dates_invalid", await ErrorCode(backwards));
+    }
+
+    [Fact]
+    public async Task A_patient_photo_is_stored_served_and_removed_within_one_laboratory()
+    {
+        var lab = await NewLabAsync();
+        var other = await SignInAsync(await NewLabAsync(), UserRole.Receptionist);
+        var reception = await SignInAsync(lab, UserRole.Receptionist);
+        var patient = await Post<PatientDto>(reception, "/api/patients", NewPatient("รูป"));
+        var url = $"/api/patients/{patient.Id}/photo";
+        Assert.Null(patient.PhotoAt);
+        Assert.Equal(HttpStatusCode.NotFound, (await reception.GetAsync(url)).StatusCode);
+
+        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4];
+        var withPhoto = await Read<PatientDto>(await reception.PutAsJsonAsync(url, new PatientPhotoRequest(Convert.ToBase64String(jpeg)), Json));
+        Assert.NotNull(withPhoto.PhotoAt);
+        var served = await reception.GetAsync(url);
+        Assert.Equal("image/jpeg", served.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(jpeg, await served.Content.ReadAsByteArrayAsync());
+
+        // Only real images, judged by their bytes; never another laboratory's patient.
+        var html = await reception.PutAsJsonAsync(url, new PatientPhotoRequest(Convert.ToBase64String("<script>"u8.ToArray())), Json);
+        Assert.Equal("photo_invalid", await ErrorCode(html));
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(url)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PutAsJsonAsync(url, new PatientPhotoRequest(Convert.ToBase64String(jpeg)), Json)).StatusCode);
+
+        var removed = await Read<PatientDto>(await reception.DeleteAsync(url));
+        Assert.Null(removed.PhotoAt);
+        Assert.Equal(HttpStatusCode.NotFound, (await reception.GetAsync(url)).StatusCode);
     }
 
     [Fact]

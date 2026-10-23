@@ -164,7 +164,7 @@ public class UserService(
             IsActive = true,
         };
         Apply(user, request.FirstNameTh, request.LastNameTh, request.FirstNameEn, request.LastNameEn, request.Position,
-            request.Email, request.Phone, request.EmployeeCode, request.BranchId, request.Role, request.DepartmentIds);
+            request.Email, request.Phone, request.EmployeeCode, request.LicenseNo, request.BranchId, request.Role, request.DepartmentIds);
         users.Add(user);
         audit.Write(ctx, "user.create", "user", user.Id.ToString(), $"{user.Username} ({user.Role})");
         await unitOfWork.SaveChangesAsync(ct);
@@ -191,7 +191,7 @@ public class UserService(
         }
         var before = $"{user.Role}/{(user.IsActive ? "active" : "suspended")}";
         Apply(user, request.FirstNameTh, request.LastNameTh, request.FirstNameEn, request.LastNameEn, request.Position,
-            request.Email, request.Phone, request.EmployeeCode, request.BranchId, request.Role, request.DepartmentIds);
+            request.Email, request.Phone, request.EmployeeCode, request.LicenseNo, request.BranchId, request.Role, request.DepartmentIds);
         user.IsActive = request.IsActive;
         var after = $"{user.Role}/{(user.IsActive ? "active" : "suspended")}";
         audit.Write(ctx, "user.update", "user", user.Id.ToString(),
@@ -216,8 +216,11 @@ public class UserService(
     }
 
     private static void Apply(User user, string firstTh, string lastTh, string? firstEn, string? lastEn, string? position,
-        string? email, string? phone, string? employeeCode, Guid? branchId, UserRole role, List<Guid>? departmentIds)
+        string? email, string? phone, string? employeeCode, string? licenseNo, Guid? branchId, UserRole role, List<Guid>? departmentIds)
     {
+        user.LicenseNo = Text.Clean(licenseNo);
+        if (user.LicenseNo is null && Permissions.NeedsLicense(role))
+            throw new BusinessRuleException("license_required", "Medical technologists and physicians need a professional licence number.");
         user.FirstNameTh = firstTh.Trim();
         user.LastNameTh = lastTh.Trim();
         user.FirstNameEn = Text.Clean(firstEn);

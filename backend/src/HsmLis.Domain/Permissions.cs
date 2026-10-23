@@ -34,7 +34,7 @@ public static class Permissions
         [UserRole.CompanyAdmin] = [.. All],
         [UserRole.BranchAdmin] = [.. All],
         [UserRole.LabManager] = [Dashboard, Patients, Orders, CheckIn, ResultsEnter, ResultsVerify, ResultsApprove, Reports, SettingsLab],
-        [UserRole.LabTechnician] = [Dashboard, Patients, Orders, CheckIn, ResultsEnter, ResultsVerify, Reports],
+        [UserRole.LabTechnician] = [Dashboard, Patients, Orders, CheckIn, ResultsEnter, ResultsVerify, ResultsApprove, Reports],
         [UserRole.Doctor] = [Dashboard, Patients, Orders, ResultsApprove, Reports],
         [UserRole.Receptionist] = [Dashboard, Patients, Orders, CheckIn],
         [UserRole.Cashier] = [Dashboard, Patients, Billing],
@@ -43,6 +43,9 @@ public static class Permissions
     public static IReadOnlySet<string> For(UserRole role) => ByRole[role];
 
     public static bool Has(UserRole role, string permission) => ByRole[role].Contains(permission);
+
+    /// <summary>Medical professionals: they must have a licence number on file.</summary>
+    public static bool NeedsLicense(UserRole role) => role is UserRole.LabManager or UserRole.LabTechnician or UserRole.Doctor;
 
     /// <summary>0 is the most powerful. Nobody may create or edit a user above their own level.</summary>
     public static int Level(UserRole role) => role switch

@@ -29,6 +29,7 @@ import {
 } from '../../components/ui'
 import { api, type WorklistRow, type WorklistStage } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
+import { PatientPhoto } from '../../components/PatientPhoto'
 
 const STAGES: WorklistStage[] = ['All', 'Entry', 'Verify', 'Approve', 'Critical']
 
@@ -127,7 +128,10 @@ function WorklistTable({ rows, loading }: { rows: WorklistRow[] | undefined; loa
                 {r.hn}
               </td>
               <td className={tdClass} data-label={t('patient.name')}>
-                {r.patientName}
+                <span className="flex items-center gap-2">
+                  <PatientPhoto patientId={r.patientId} photoAt={r.patientPhotoAt} name={r.patientName} />
+                  {r.patientName}
+                </span>
               </td>
               <td className={`${tdClass} max-w-48 truncate text-ink-muted`} data-label={t('order.referrer')}>
                 {r.referrerName ?? '–'}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, PackageOpen, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Dices, PackageOpen, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PatientPicker } from '../../components/PatientPicker'
@@ -37,6 +37,10 @@ function useFitToWindow<T extends HTMLElement>() {
 const ENTITLEMENTS =['ชำระเงินเอง', 'บัตรทอง (UC)', 'ประกันสังคม', 'ข้าราชการ', 'ต้นสังกัด', 'อื่น ๆ']
 
 const num = (s: string) => (s.trim() === '' ? null : Number(s))
+const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
+const between = (min: number, max: number, digits = 0) => (min + Math.random() * (max - min)).toFixed(digits)
+const chance = (p: number) => Math.random() < p
+const someOf = <T,>(list: T[], max: number) => [...list].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * max))
 
 export function NewOrderPage() {
   const { t, formatMoney } = useI18n()
@@ -126,11 +130,43 @@ export function NewOrderPage() {
   })
 
   const setV = (patch: Partial<typeof visit>) => setVisit({ ...visit, ...patch })
+
+  // Development only: fills the form with random values to try the order flow quickly.
+  const fillTestData = async () => {
+    if (!patient) {
+      const recent = await api.recentPatients().catch(() => [])
+      if (recent.length === 0) return toast(t('order.testDataNoPatient'), 'error')
+      setPatient(pick(recent))
+    }
+    const referrer = pick([null, ...(referrers.data ?? []).filter((r) => r.isActive)])
+    setVisit({
+      referrerId: referrer?.id ?? '',
+      referrerRef: referrer ? `REF-${between(1000, 9999)}` : '',
+      entitlement: pick(ENTITLEMENTS),
+      bpSys: between(100, 150),
+      bpDia: between(60, 95),
+      hr: between(60, 100),
+      temp: between(36, 37.5, 1),
+      weight: between(45, 90),
+      height: between(150, 185),
+    })
+    setPackageIds([])
+    setTestIds(someOf(activeTests, 4).map((x) => x.id))
+    setUrgent(chance(0.2))
+    setDiagnosis(pick(['', 'ตรวจสุขภาพประจำปี', 'ไข้ ไม่ทราบสาเหตุ', 'ติดตามเบาหวาน']))
+  }
   const summaryRef = useFitToWindow<HTMLDivElement>()
 
   return (
     <div>
-      <PageHeader title={t('order.newTitle')} description={t('order.newSubtitle')} back="/lab-orders" />
+      <PageHeader title={t('order.newTitle')} description={t('order.newSubtitle')} back="/lab-orders">
+        {import.meta.env.DEV ? (
+          <Button variant="ghost" onClick={fillTestData}>
+            <Dices className="size-4" />
+            {t('order.fillTestData')}
+          </Button>
+        ) : null}
+      </PageHeader>
       <div className="grid items-start gap-5 xl:grid-cols-[1fr_22rem]">
         <div className="space-y-5">
           <Card>

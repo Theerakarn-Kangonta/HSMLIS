@@ -21,13 +21,14 @@ import {
   Textarea,
   useToast,
 } from '../../components/ui'
-import { api, ApiError, type OrderDetail, type OrderItem, type PreviousResult, type ResultActionResponse } from '../../lib/api'
+import { api, type OrderDetail, type OrderItem, type PreviousResult, type ResultActionResponse } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useBackLink } from '../../lib/backLink'
 import { useLabTests } from '../../lib/catalog'
 import { useI18n } from '../../lib/i18n'
 import { describe, evaluate, pickRange } from '../../lib/results'
 import { useOrder } from '../orders/OrderDetailPage'
+import { PatientPhoto } from '../../components/PatientPhoto'
 
 type Draft = { value: string; comment: string }
 
@@ -63,6 +64,7 @@ function Entry({ order }: { order: OrderDetail }) {
   const [historyOf, setHistoryOf] = useState<OrderItem | null>(null)
   const [reopen, setReopen] = useState<OrderItem | null>(null)
   const [previousOf, setPreviousOf] = useState<OrderItem | null>(null)
+  const [signing, setSigning] = useState(false)
   // The patient's earlier approved results for these tests, newest first.
   const previous = useQuery({ queryKey: ['previous-results', order.id], queryFn: () => api.previousResults(order.id), staleTime: 60_000 })
   const previousByTest = useMemo(() => {
@@ -102,16 +104,19 @@ function Entry({ order }: { order: OrderDetail }) {
   const active = depItems.filter((i) => i.resultStatus !== 'Cancelled').length
   const flagged = depItems.filter((i) => previewFlag(i) !== 'None').length
   const verifiable = depItems.filter((i) => i.resultStatus === 'Entered').length
-  const approvable = depItems.filter((i) => i.resultStatus === 'Verified').length
+  // Approving also verifies, so entered results count too.
+  const approvable = depItems.filter((i) => i.resultStatus === 'Entered' || i.resultStatus === 'Verified').length
 
-  const switchDepartment = (id: string) => {
-    if (id === depId) return
-    if (dirty) {
-      if (!window.confirm(t('result.discardUnsaved'))) return
-      setDrafts(draftsOf(order))
-    }
+  const [switchTo, setSwitchTo] = useState<string | null>(null)
+  const goToDepartment = (id: string) => {
+    setSwitchTo(null)
     setParams({ dep: id }, { replace: true })
     window.scrollTo({ top: 0 })
+  }
+  const switchDepartment = (id: string) => {
+    if (id === depId) return
+    if (dirty) setSwitchTo(id)
+    else goToDepartment(id)
   }
 
   const applied = (r: ResultActionResponse) => {
@@ -123,7 +128,7 @@ function Entry({ order }: { order: OrderDetail }) {
   const run = useMutation({
     // Saves what changed first, so verifying or approving always acts on what is on screen.
     // The screen is refreshed once, at the end, with the order as the last call returned it.
-    mutationFn: async (action: 'save' | 'verify' | 'approve') => {
+    mutationFn: async ({ action, licenseNo = '' }: { action: 'save' | 'verify' | 'approve'; licenseNo?: string }) => {
       let version = order.version
       let saved: ResultActionResponse | null = null
       if (dirty) {
@@ -132,7 +137,7 @@ function Entry({ order }: { order: OrderDetail }) {
       }
       if (action === 'save') return { action, response: saved }
       const ids = depItems.map((i) => i.id)
-      const response = action === 'verify' ? await api.verifyResults(order.id, version, ids) : await api.approveResults(order.id, version, ids)
+      const response = action === 'verify' ? await api.verifyResults(order.id, version, ids) : await api.approveResults(order.id, version, ids, licenseNo)
       return { action, response }
     },
     onSuccess: ({ action, response }) => {
@@ -140,16 +145,14 @@ function Entry({ order }: { order: OrderDetail }) {
       if (action === 'save') toast(t('result.savedToast'))
       if (action === 'verify') toast(t('result.verifiedToast', { n: response!.done }))
       if (action === 'approve') {
+        setSigning(false)
         toast(t('result.approvedToast', { n: response!.done }))
-        if (response!.skipped > 0) toast(t('result.approveSkipped', { n: response!.skipped }), 'error')
         // This department is signed off: back to the worklist for the next one.
         if (!response!.order.items.some((i) => i.departmentId === depId && isOpen(i))) navigate('/lab-results')
       }
     },
     onError: (error) => {
-      // Approving one's own fresh work is refused with a reason worth reading in full.
-      if (error instanceof ApiError && error.code === 'self_approval_wait') toast(t('result.selfApprovalWait'), 'error')
-      else toast(errorText(error), 'error')
+      toast(errorText(error), 'error')
       queryClient.invalidateQueries({ queryKey: ['order', order.id] })
     },
   })
@@ -168,6 +171,7 @@ function Entry({ order }: { order: OrderDetail }) {
     <div className="pb-24">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
+          <PatientPhoto patientId={order.patient.id} photoAt={order.patient.photoAt} name={order.patient.fullName} size="md" />
           <div>
             <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold text-ink">
               {order.patient.fullName}
@@ -357,19 +361,19 @@ function Entry({ order }: { order: OrderDetail }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {can('results.enter') ? (
-              <Button variant="secondary" onClick={() => run.mutate('save')} disabled={!dirty} loading={run.isPending && run.variables === 'save'}>
+              <Button variant="secondary" onClick={() => run.mutate({ action: 'save' })} disabled={!dirty} loading={run.isPending && run.variables?.action === 'save'}>
                 <Save className="size-4" />
                 {t('result.saveDraft')}
               </Button>
             ) : null}
             {can('results.verify') ? (
-              <Button variant="secondary" onClick={() => run.mutate('verify')} disabled={verifiable === 0 && !dirty} loading={run.isPending && run.variables === 'verify'}>
+              <Button variant="secondary" onClick={() => run.mutate({ action: 'verify' })} disabled={verifiable === 0 && !dirty} loading={run.isPending && run.variables?.action === 'verify'}>
                 <CheckCheck className="size-4" />
                 {dep ? t('result.verifyDept', { dep: dep.name }) : t('result.verifyAll')}
               </Button>
             ) : null}
             {can('results.approve') ? (
-              <Button variant="success" onClick={() => run.mutate('approve')} disabled={approvable === 0} loading={run.isPending && run.variables === 'approve'}>
+              <Button variant="success" onClick={() => setSigning(true)} disabled={approvable === 0 && !dirty} loading={run.isPending && run.variables?.action === 'approve'}>
                 <ShieldCheck className="size-4" />
                 {dep ? t('result.approveDept', { dep: dep.name }) : t('result.approveSign')}
               </Button>
@@ -378,6 +382,36 @@ function Entry({ order }: { order: OrderDetail }) {
         </div>
       </div>
 
+      {signing ? (
+        <LicenseDialog title={dep ? t('result.approveDept', { dep: dep.name }) : t('result.approveSign')} pending={run.isPending} onClose={() => setSigning(false)} onSubmit={(licenseNo) => run.mutate({ action: 'approve', licenseNo })} />
+      ) : null}
+      {switchTo ? (
+        <Modal title={t('result.unsavedTitle')} onClose={() => setSwitchTo(null)}>
+          <div className="flex gap-3">
+            <TriangleAlert className="size-5 shrink-0 text-amber-500" aria-hidden />
+            <p className="text-sm text-ink">{t('result.discardUnsaved', { n: dirtyItems.length })}</p>
+          </div>
+          <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-rule pt-4">
+            <Button variant="secondary" onClick={() => setSwitchTo(null)} disabled={run.isPending}>
+              {t('result.stayHere')}
+            </Button>
+            <Button
+              variant="dangerOutline"
+              disabled={run.isPending}
+              onClick={() => {
+                setDrafts(draftsOf(order))
+                goToDepartment(switchTo)
+              }}
+            >
+              {t('result.discardSwitch')}
+            </Button>
+            <Button loading={run.isPending} onClick={() => run.mutate({ action: 'save' }, { onSuccess: () => goToDepartment(switchTo) })}>
+              <Save className="size-4" />
+              {t('result.saveSwitch')}
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
       {historyOf ? <HistoryDialog order={order} item={historyOf} onClose={() => setHistoryOf(null)} /> : null}
       {reopen ? <ReopenDialog order={order} item={reopen} onClose={() => setReopen(null)} /> : null}
       {previousOf ? (
@@ -517,6 +551,26 @@ function HistoryDialog({ order, item, onClose }: { order: OrderDetail; item: Ord
           </li>
         ))}
       </ol>
+    </Modal>
+  )
+}
+
+/** Asked on every approval: the server checks the number against the approver's registered licence. */
+function LicenseDialog({ title, pending, onClose, onSubmit }: { title: string; pending: boolean; onClose: () => void; onSubmit: (licenseNo: string) => void }) {
+  const { t } = useI18n()
+  const [licenseNo, setLicenseNo] = useState('')
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    onSubmit(licenseNo)
+  }
+  return (
+    <Modal title={title} description={t('result.licenseHint')} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label={t('users.licenseNo')}>
+          <Input value={licenseNo} onChange={(e) => setLicenseNo(e.target.value)} required maxLength={40} autoComplete="off" autoFocus />
+        </Field>
+        <DialogActions onClose={onClose} pending={pending} submitLabel={t('result.approveConfirm')} variant="success" />
+      </form>
     </Modal>
   )
 }
